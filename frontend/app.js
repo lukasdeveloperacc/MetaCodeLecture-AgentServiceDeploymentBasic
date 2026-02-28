@@ -3,7 +3,7 @@
  * Server-Sent Events (SSE) 기반 Streaming 응답 처리
  */
 
-const API_BASE_URL = 'http://localhost:8002';
+const API_BASE_URL = 'http://localhost:8000';
 
 // 현재 활성화된 EventSource 추적
 let currentEventSource = null;
