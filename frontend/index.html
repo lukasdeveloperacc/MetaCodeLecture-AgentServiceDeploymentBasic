@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG/Agent Demo Service</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <header class="header">
+            <h1 class="title">RAG/Agent Demo Service</h1>
+            <p class="subtitle">AI 서비스 통합 & 배포 강의 데모</p>
+        </header>
+
+        <!-- 탭 네비게이션 -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="ask">Ask</button>
+            <button class="tab" data-tab="rag">RAG</button>
+            <button class="tab" data-tab="agent">Agent</button>
+        </nav>
+
+        <!-- Ask 탭 -->
+        <div class="tab-content active" id="ask-tab">
+            <div class="description">
+                <h2>LLM 직접 호출</h2>
+                <p>OpenAI API를 직접 호출하여 답변을 생성합니다.</p>
+            </div>
+
+            <form class="input-form" id="ask-form">
+                <textarea
+                    class="input-text"
+                    id="ask-input"
+                    placeholder="질문을 입력하세요..."
+                    rows="4"
+                ></textarea>
+                <button type="submit" class="submit-btn">전송</button>
+            </form>
+
+            <div class="response-area">
+                <h3>응답:</h3>
+                <div class="response-box" id="ask-response"></div>
+                <div class="trace-info" id="ask-trace"></div>
+            </div>
+        </div>
+
+        <!-- RAG 탭 -->
+        <div class="tab-content" id="rag-tab">
+            <div class="description">
+                <h2>RAG 질문 응답</h2>
+                <p>Pinecone에서 관련 문서를 검색하여 답변을 생성합니다.</p>
+            </div>
+
+            <form class="input-form" id="rag-form">
+                <textarea
+                    class="input-text"
+                    id="rag-input"
+                    placeholder="AI 서비스 관련 질문을 입력하세요..."
+                    rows="4"
+                ></textarea>
+                <button type="submit" class="submit-btn">전송</button>
+            </form>
+
+            <div class="sources-area" id="rag-sources"></div>
+
+            <div class="response-area">
+                <h3>응답:</h3>
+                <div class="response-box" id="rag-response"></div>
+                <div class="trace-info" id="rag-trace"></div>
+            </div>
+        </div>
+
+        <!-- Agent 탭 -->
+        <div class="tab-content" id="agent-tab">
+            <div class="description">
+                <h2>Agent 시스템</h2>
+                <p>질문을 분류하여 RAG 또는 Direct LLM 경로로 자동 라우팅합니다.</p>
+            </div>
+
+            <form class="input-form" id="agent-form">
+                <textarea
+                    class="input-text"
+                    id="agent-input"
+                    placeholder="질문을 입력하세요..."
+                    rows="4"
+                ></textarea>
+                <button type="submit" class="submit-btn">전송</button>
+            </form>
+
+            <div class="classification-area" id="agent-classification"></div>
+            <div class="sources-area" id="agent-sources"></div>
+
+            <div class="response-area">
+                <h3>응답:</h3>
+                <div class="response-box" id="agent-response"></div>
+                <div class="trace-info" id="agent-trace"></div>
+            </div>
+        </div>
+
+        <!-- 푸터 -->
+        <footer class="footer">
+            <p>RAG/Agent Demo Service v1.0.0 | AI 서비스 통합 & 배포 강의</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

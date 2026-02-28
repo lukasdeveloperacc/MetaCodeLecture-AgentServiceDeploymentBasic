@@ -1,0 +1,21 @@
+[project]
+name = "rag-agent-backend"
+version = "1.0.0"
+description = "RAG/Agent Demo Service Backend - AI 서비스 통합 & 배포 강의용"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "openai>=1.12.0",
+    "langchain>=0.1.6",
+    "langchain-openai>=0.0.5",
+    "langchain-community>=0.0.20",
+    "langgraph>=0.0.25",
+    "pinecone>=5.0.0",
+    "langchain-pinecone>=0.2.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.1.0",
+]
+
