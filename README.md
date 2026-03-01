@@ -15,3 +15,6 @@ powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```bash
 uv sync
 ```
+
+## Docker 설치
+- https://www.docker.com/products/docker-desktop/
