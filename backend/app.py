@@ -10,7 +10,7 @@ import logging
 from typing import AsyncGenerator
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,7 +20,6 @@ from langchain_pinecone import PineconeVectorStore
 # 환경변수 로드
 load_dotenv()
 print(f"=== Environment Variables {os.getenv('ENVIRONMENT')} ===")
-print(os.environ)
 
 # Custom Formatter: trace_id가 없으면 기본값 제공
 class TraceIdFormatter(logging.Formatter):
@@ -57,9 +56,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost",
         "http://localhost:3000",
         "http://127.0.0.1:5500",  # Live Server
-        "http://localhost:5500"
+        "http://localhost:5500",
+        "http://localhost:1235"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -153,7 +154,7 @@ async def startup_event():
 @app.get("/health")
 async def health_check():
     """헬스체크 엔드포인트"""
-    return {"status": "healthy"}
+    return Response(content='{"status": "healthy"}', media_type="application/json")
 
 
 @app.get("/ready")
@@ -166,10 +167,7 @@ async def readiness_check():
 
     status = "ready" if all(checks.values()) else "not_ready"
 
-    return {
-        "status": status,
-        "checks": checks
-    }
+    return Response(content=f'{{"status": "{status}", "checks": {checks}}}', media_type="application/json")
 
 
 @app.get("/ask")
