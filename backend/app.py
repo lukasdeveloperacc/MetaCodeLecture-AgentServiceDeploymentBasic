@@ -19,7 +19,8 @@ from langchain_pinecone import PineconeVectorStore
 
 # 환경변수 로드
 load_dotenv()
-
+print(f"=== Environment Variables {os.getenv('ENVIRONMENT')} ===")
+print(os.environ)
 
 # Custom Formatter: trace_id가 없으면 기본값 제공
 class TraceIdFormatter(logging.Formatter):
