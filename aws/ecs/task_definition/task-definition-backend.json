@@ -4,12 +4,12 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "512",
   "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::{ACCOUNT_ID}:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::{ACCOUNT_ID}:role/ecsTaskRole",
+  "executionRoleArn": "arn:aws:iam::377152275091:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::377152275091:role/ecsTaskRole",
   "containerDefinitions": [
     {
       "name": "backend",
-      "image": "{ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com/backend:v1",
+      "image": "377152275091.dkr.ecr.ap-northeast-2.amazonaws.com/backend:v1",
       "essential": true,
       "portMappings": [
         {
@@ -25,46 +25,22 @@
         {
           "name": "LOG_LEVEL",
           "value": "DEBUG"
-        },
-        {
-          "name": "PINECONE_INDEX_NAME",
-          "value": "ai-service-docs-dev"
-        },
-        {
-          "name": "LLM_MODEL",
-          "value": "ai-service-docs-dev"
-        },
-        {
-          "name": "LLM_TEMPERATURE",
-          "value": "0.7"
-        },
-        {
-          "name": "LLM_MAX_TOKENS",
-          "value": "1000"
-        },
-        {
-          "name": "RAG_TOP_K",
-          "value": "3"
-        },
-        {
-          "name": "EMBEDDING_MODEL",
-          "value": "text-embedding-3-small"
         }
       ],
       "secrets": [
         {
           "name": "OPENAI_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:{ACCOUNT_ID}:secret:prod/openai-api-key"
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:377152275091:secret:dev/openai-api-key"
         },
         {
           "name": "PINECONE_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:{ACCOUNT_ID}:secret:prod/pinecone-api-key"
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:377152275091:secret:dev/pinecone-api-key"
         }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/rag-backend",
+          "awslogs-group": "/ecs/backend",
           "awslogs-region": "ap-northeast-2",
           "awslogs-stream-prefix": "ecs"
         }

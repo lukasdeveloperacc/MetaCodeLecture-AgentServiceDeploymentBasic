@@ -1,6 +1,7 @@
 services:
   backend:
-    image: backend:v1
+    platform: linux/amd64
+    image: 377152275091.dkr.ecr.ap-northeast-2.amazonaws.com/backend:v1
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -20,7 +21,8 @@ services:
       start_period: 40s
 
   frontend:
-    image: frontend:v1
+    platform: linux/amd64
+    image: 377152275091.dkr.ecr.ap-northeast-2.amazonaws.com/frontend:v1
     build:
       context: ./frontend
       dockerfile: Dockerfile
