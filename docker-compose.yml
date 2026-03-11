@@ -1,7 +1,7 @@
 services:
   backend:
     platform: linux/amd64
-    image: 377152275091.dkr.ecr.ap-northeast-2.amazonaws.com/backend:v1
+    image: asia-northeast3-docker.pkg.dev/agent-service-prj/agent/backend:v1
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -22,7 +22,7 @@ services:
 
   frontend:
     platform: linux/amd64
-    image: 377152275091.dkr.ecr.ap-northeast-2.amazonaws.com/frontend:v1
+    image: asia-northeast3-docker.pkg.dev/agent-service-prj/agent/frontend:v1
     build:
       context: ./frontend
       dockerfile: Dockerfile
