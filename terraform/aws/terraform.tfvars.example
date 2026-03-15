@@ -1,0 +1,115 @@
+# ==============================================================================
+# Terraform Variables 예시 파일
+# ==============================================================================
+#
+# 🎯 사용 방법:
+# 1. 이 파일을 복사하여 terraform.tfvars 생성:
+#    cp terraform.tfvars.example terraform.tfvars
+#
+# 2. 실제 값으로 교체 (특히 VPC ID, Subnet IDs, Secret ARNs)
+#
+# 3. terraform apply 실행
+#
+# ⚠️  주의: terraform.tfvars는 .gitignore에 포함되어 있습니다 (민감 정보 보호)
+
+# ------------------------------------------------------------------------------
+# AWS 리전
+# ------------------------------------------------------------------------------
+
+aws_region = "ap-northeast-2"  # 서울 리전
+
+# ------------------------------------------------------------------------------
+# 프로젝트 정보
+# ------------------------------------------------------------------------------
+
+project_name = "agent-service"
+environment  = "tf"  # 리소스 이름: backend-tf, frontend-tf, agent-cluster-tf
+
+# ------------------------------------------------------------------------------
+# VPC 정보 (기본 VPC 사용)
+# ------------------------------------------------------------------------------
+#
+# 🔍 VPC ID 및 Subnet IDs 확인 방법:
+#
+# 방법 1: 자동 스크립트 사용 (권장)
+#   bash ../../aws/scripts/get_vpc_info.sh
+#
+# 방법 2: AWS CLI 명령어 사용
+#   # VPC ID 확인
+#   aws ec2 describe-vpcs \
+#     --filters "Name=isDefault,Values=true" \
+#     --query 'Vpcs[0].VpcId' \
+#     --output text
+#
+#   # Subnet IDs 확인 (최소 2개 필요)
+#   aws ec2 describe-subnets \
+#     --filters "Name=vpc-id,Values=vpc-XXXXX" \
+#     --query 'Subnets[*].[SubnetId,AvailabilityZone]' \
+#     --output table
+
+vpc_id = "vpc-0123456789abcdef0"  # 실제 VPC ID로 교체
+
+public_subnet_ids = [
+  "subnet-0123456789abcdef0",  # ap-northeast-2a
+  "subnet-0123456789abcdef1"   # ap-northeast-2c
+]
+
+# ------------------------------------------------------------------------------
+# Secrets Manager 시크릿 이름
+# ------------------------------------------------------------------------------
+#
+# 🔍 Secret 이름 확인 방법:
+#   aws secretsmanager list-secrets \
+#     --region ap-northeast-2 \
+#     --query 'SecretList[*].Name' \
+#     --output table
+#
+# ⚠️  Section 3에서 생성한 Secrets을 사용합니다.
+#     아직 생성하지 않았다면 Section 3 문서를 참고하여 먼저 생성하세요.
+#
+# 💡 Terraform이 자동으로 ARN을 조회하므로 이름만 입력하면 됩니다!
+
+openai_secret_name   = "dev/openai-api-key"
+pinecone_secret_name = "dev/pinecone-api-key"
+
+# ------------------------------------------------------------------------------
+# ECS Task 설정
+# ------------------------------------------------------------------------------
+#
+# 💡 CPU와 Memory 호환성:
+#   256 CPU:  512-2048 MB
+#   512 CPU:  1024-4096 MB
+#   1024 CPU: 2048-8192 MB
+
+# Backend 설정 (FastAPI + OpenAI + Pinecone)
+backend_cpu    = "512"   # 0.5 vCPU
+backend_memory = "1024"  # 1 GB
+
+# Frontend 설정 (Nginx + Static Files)
+frontend_cpu    = "256"  # 0.25 vCPU
+frontend_memory = "512"  # 512 MB
+
+# ------------------------------------------------------------------------------
+# ECS Service 설정
+# ------------------------------------------------------------------------------
+#
+# 💡 Desired Count:
+#   - 개발 환경: 1-2 (비용 절감)
+#   - 프로덕션: 2+ (고가용성)
+#   - 최소 2개 권장 (ALB Health Check 안정성)
+
+backend_desired_count  = 2  # Backend Task 수
+frontend_desired_count = 2  # Frontend Task 수
+
+# ------------------------------------------------------------------------------
+# 선택적 설정 (고급)
+# ------------------------------------------------------------------------------
+
+# Auto Scaling 활성화 시:
+# backend_min_capacity = 2
+# backend_max_capacity = 10
+# backend_target_cpu   = 70
+
+# HTTPS 사용 시:
+# certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/xxxxx"
+# domain_name = "api.example.com"

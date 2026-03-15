@@ -1,105 +1,149 @@
 # Section 5: Terraform 기반 Infrastructure as Code (IaC)
 
 ## 학습 목표
-- IaC의 핵심 개념과 Terraform 기초 이해
-- **Terraform으로 인프라를 코드로 관리하는 방법** 학습
-- Section 3-4 수동 배포와 Terraform 비교 경험
-- Terraform State 관리 및 협업 전략
-- 실무에서 적용 가능한 IaC 접근법
+- **Section 3/4 수동 배포를 Terraform 코드로 전환**하여 IaC의 실용성 체험
+- Terraform 기초 개념 완전 이해 (Provider, Resource, Variable, State)
+- `terraform apply` 한 번으로 전체 인프라 자동 생성
+- 코드로 인프라를 관리하는 실무 패턴 습득
+- **AWS와 GCP 멀티 클라우드 배포** 경험을 통한 클라우드 중립적 사고 배양
+- 각 클라우드의 장단점 비교 및 프로젝트 상황별 선택 능력 배양
 
-## ✅ Section 5의 접근 방식
+## 📊 Section 3 vs Section 5: 왜 Terraform인가?
 
-### 비교 학습 전략
+| 작업 | Section 3 (수동 배포) | Section 5 (Terraform) |
+|------|----------------------|----------------------|
+| **ECR 생성** | Console 클릭 → 이름 입력 → 생성 | `resource "aws_ecr_repository"` (5줄) |
+| **Task Definition** | JSON 작성 → CLI 등록 → 버전 관리 복잡 | `resource "aws_ecs_task_definition"` (30줄) |
+| **ALB 생성** | Console 10단계 클릭 → 15분 소요 | `resource "aws_lb"` (10줄) |
+| **Security Group** | 규칙 하나씩 클릭 추가 | 코드로 명확히 정의 |
+| **재현성** | ❌ 문서 보고 다시 클릭 (휴먼 에러 발생) | ✅ `terraform apply` (100% 동일) |
+| **롤백** | ❌ 수동으로 하나씩 삭제 | ✅ `terraform destroy` (10초) |
+| **변경 추적** | ❌ "누가 언제 뭘 바꿨지?" | ✅ Git 커밋 이력으로 추적 |
+| **협업** | ❌ 문서화 어려움 | ✅ 코드 리뷰, PR |
+| **속도** | ⏱️ 30-60분 (클릭 반복) | ⚡ 5-10분 (자동화) |
 
-**Section 3-4에서 학습한 내용:**
-- AWS: Console과 CLI로 ECS/Fargate 수동 배포
-- GCP: gcloud 명령으로 Cloud Run 수동 배포
-- 직접 클릭하고 명령어 입력하며 리소스 생성
+### 실무에서는?
+- **개발 환경**: Terraform으로 생성/삭제 반복 → 비용 절감
+- **스테이징/프로덕션**: Terraform으로 동일한 구성 재현 → 환경 일관성 보장
+- **인프라 변경**: PR 리뷰 → 승인 → terraform apply → 안전한 배포
 
-**Section 5에서 학습할 내용:**
-- **Section 3-4 리소스는 그대로 유지** (삭제하지 않음)
-- **별도 이름**의 리소스를 Terraform으로 생성
-- 수동 배포 vs IaC 비교하며 장단점 체험
-- 학습 완료 후 선택적으로 리소스 정리
+---
 
-### 리소스 충돌 방지 전략
+# Part 1: AWS Terraform 배포
 
-**Section 3-4 리소스 (수동 생성):**
-- AWS: `backend`, `frontend`, `agent-cluster`
-- GCP: `backend-dev`, `frontend-dev`
+이 섹션에서는 **AWS ECS/Fargate + ALB**를 Terraform으로 배포합니다.
+Section 3에서 수동으로 구축했던 인프라를 코드로 자동화하는 과정을 배웁니다.
 
-**Section 5 리소스 (Terraform 생성):**
-- AWS: `backend-tf`, `frontend-tf`, `agent-cluster-tf`
-- GCP: `backend-terraform`, `frontend-terraform`
+## 🗂️ Terraform 파일 구조
 
-→ **서로 다른 이름**으로 충돌 없이 공존 가능!
+Section 5에서 새로 추가된 파일들:
 
-### Terraform으로 생성할 리소스
-
-**AWS:**
-- ✅ ECR Repository (컨테이너 레지스트리)
-- ✅ ALB (Application Load Balancer)
-- ✅ Target Groups (로드밸런서 타겟)
-- ✅ Security Groups (방화벽 규칙)
-- ✅ IAM Roles/Policies (권한 관리)
-- ✅ ECS Cluster (컨테이너 클러스터)
-- ✅ ECS Task Definition (컨테이너 설정)
-- ✅ ECS Service (컨테이너 실행)
-- ⚠️ VPC, Subnets만 Section 3 기존 것 재사용 (네트워크 기본 인프라)
-
-**GCP:**
-- ✅ Artifact Registry (컨테이너 레지스트리)
-- ✅ Cloud Run Service (서버리스 컨테이너)
-- ⚠️ VPC만 기존 것 재사용
-
-**VPC만 재사용하는 이유:**
-1. VPC는 AWS 계정의 기본 네트워크 인프라 (재생성 불필요)
-2. 나머지 리소스는 모두 Terraform으로 생성하여 완전한 IaC 경험 제공
-3. `terraform apply` 한 번으로 전체 인프라 자동 생성
-
-## 새로 추가된 파일
 ```
-terraform/
-  ├── aws/
-  │   ├── main.tf                    # AWS 리소스 정의
-  │   ├── variables.tf               # 변수 정의
-  │   ├── outputs.tf                 # 출력 변수
-  │   └── terraform.tfvars.example   # 변수 예시
-  │
-  └── gcp/
-      ├── main.tf                    # GCP 리소스 정의
-      ├── variables.tf               # 변수 정의
-      ├── outputs.tf                 # 출력 변수
-      └── terraform.tfvars.example   # 변수 예시
+terraform/aws/
+  ├── main.tf                   # Provider 설정 (10줄)
+  ├── data.tf                   # Data Sources - Secret ARN 자동 조회 (40줄)
+  ├── iam.tf                    # IAM Roles (80줄)
+  ├── ecr.tf                    # ECR Repositories (30줄)
+  ├── cloudwatch.tf             # Log Groups (20줄)
+  ├── network.tf                # Security Groups, Dual ALB, Target Groups (350줄)
+  ├── ecs.tf                    # Cluster, Task Definitions, Services (200줄)
+  ├── variables.tf              # 변수 정의
+  ├── outputs.tf                # 출력 정의
+  └── terraform.tfvars.example  # 변수 값 예시
+
+aws/scripts/
+  └── get_vpc_info.sh           # VPC 자동 확인 스크립트
 ```
 
-## Infrastructure as Code (IaC)란?
+**파일 분리 이유**:
+- **가독성**: 각 파일이 명확한 역할 (iam.tf = IAM만, network.tf = 네트워크만)
+- **유지보수**: 수정 시 해당 파일만 편집
+- **실무 패턴**: 팀 협업 시 파일별로 책임 분담
 
-### 기존 방식 vs IaC
+## 🎯 Terraform이 생성할 리소스
+
+### ✅ Terraform으로 생성
+- **ECR Repository**: backend-tf, frontend-tf
+- **IAM Roles**: ecsTaskExecutionRole-tf, ecsTaskRole-tf
+- **CloudWatch Log Groups**: /ecs/backend-tf, /ecs/frontend-tf
+- **Security Groups**: frontend-alb-sg-tf, backend-alb-sg-tf, backend-sg-tf, frontend-sg-tf
+- **ALB**: frontend-alb-tf, backend-alb-tf (Dual ALB 아키텍처, Section 3와 동일)
+- **Target Groups**: frontend-tg-tf, backend-tg-tf
+- **Listeners**: frontend-http, backend-http
+- **ECS Cluster**: agent-cluster-tf
+- **ECS Task Definitions**: backend-tf, frontend-tf
+- **ECS Services**: backend-tf-service, frontend-tf-service
+
+### ♻️ Section 3 리소스 재사용
+- **VPC/Subnets만 재사용** (기본 VPC)
+- 이유: VPC는 한번 설정 후 거의 변경 안 함 + 네트워크 기초 개념 불필요
+
+**리소스 충돌 방지**:
+- Section 3: `backend`, `frontend`, `agent-cluster`
+- Section 5: `backend-tf`, `frontend-tf`, `agent-cluster-tf`
+→ 이름이 달라서 공존 가능!
+
+## 📚 Terraform 핵심 개념
+
+### 1. Provider
+클라우드 제공자 (AWS, GCP, Azure 등)와 통신하는 플러그인
+
+```hcl
+# main.tf
+provider "aws" {
+  region = "ap-northeast-2"
+}
 ```
-기존 방식 (ClickOps):
-1. AWS Console 접속
-2. ECR 생성 클릭
-3. Task Definition 수정...
-4. Service 업데이트...
-❌ 재현 불가능, 문서화 어려움, 휴먼 에러 발생
 
-IaC (Terraform):
-1. .tf 파일 작성
-2. terraform apply
-✅ 재현 가능, 버전 관리, 자동화, 협업 용이
+### 2. Resource
+생성할 인프라 리소스
+
+```hcl
+# ecr.tf
+resource "aws_ecr_repository" "backend" {
+  name = "backend-tf"
+  # ...
+}
 ```
 
-### Terraform 핵심 개념
-- **Provider**: 클라우드 제공자 (AWS, GCP, Azure 등)
-- **Resource**: 생성할 인프라 리소스 (ECR, ECS Task 등)
-- **State**: 현재 인프라 상태 추적 파일
-- **Plan**: 변경 사항 미리보기 (실행 전 검증)
-- **Apply**: 실제 인프라 변경 적용
+### 3. Variable
+재사용 가능한 변수
 
-## Terraform 설치
+```hcl
+# variables.tf
+variable "aws_region" {
+  default = "ap-northeast-2"
+}
 
-### macOS
+# 사용: var.aws_region
+```
+
+### 4. Output
+terraform apply 후 출력할 정보
+
+```hcl
+# outputs.tf
+output "alb_dns_name" {
+  value = aws_lb.main.dns_name
+}
+```
+
+### 5. State
+현재 인프라 상태를 추적하는 파일 (`terraform.tfstate`)
+
+- **매우 중요**: 이 파일이 없으면 Terraform이 리소스를 관리할 수 없음
+- **로컬 저장** (학습용): terraform.tfstate 파일
+- **원격 저장** (팀 협업 시): S3 + DynamoDB (State Lock)
+
+## 🚀 실습: 3단계로 완성하는 Terraform 배포
+
+### Step 1: 사전 준비 및 VPC 정보 확인
+
+#### 1-1. Terraform 설치
+
+**macOS**:
+- https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli
+
 ```bash
 # Homebrew 이용
 brew tap hashicorp/tap
@@ -109,1664 +153,1408 @@ brew install hashicorp/tap/terraform
 terraform version
 ```
 
-### Linux
+#### 1-2. VPC 정보 자동 확인 (간편 방법)
+
+**자동 스크립트 실행**:
 ```bash
-# Ubuntu/Debian
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install terraform
+bash aws/scripts/get_vpc_info.sh
 ```
 
-## AWS 인프라 관리
+**스크립트가 하는 일**:
+1. 기본 VPC ID 자동 확인
+2. Public Subnet IDs 자동 확인 (최소 2개 AZ)
+3. `terraform/aws/terraform.tfvars` 파일 자동 생성
+4. 다음 단계 안내
 
-### 1. 사전 준비 - VPC 정보 확인
+**출력 예시**:
+```
+🔍 AWS 기본 VPC 정보를 확인합니다...
+📍 리전: ap-northeast-2
 
-**Terraform은 VPC/Subnets만 재사용하고, 나머지는 모두 자동 생성합니다.**
+1️⃣  기본 VPC 확인 중...
+✅ VPC ID: vpc-0123456789abcdef0
 
-기본 VPC와 Subnet ID만 확인하면 됩니다:
+2️⃣  Public Subnet 확인 중 (ALB는 최소 2개 AZ 필요)...
+  - subnet-0123456789abcdef0 (ap-northeast-2a, 10.0.1.0/24)
+  - subnet-0123456789abcdef1 (ap-northeast-2c, 10.0.2.0/24)
+
+✅ Subnet 수: 2 (충분함)
+
+3️⃣  terraform.tfvars 파일 생성 중...
+✅ 생성 완료: /path/to/project/terraform/aws/terraform.tfvars
+```
+
+#### 1-3. terraform.tfvars 파일 확인
+
+스크립트가 생성한 `terraform/aws/terraform.tfvars` 파일을 열어서 **Secret 이름 확인**:
 
 ```bash
-# 1. VPC ID 확인 (기본 VPC 사용)
-aws ec2 describe-vpcs \
-  --query 'Vpcs[?IsDefault==`true`].VpcId' \
-  --output text
+vi terraform/aws/terraform.tfvars
+```
 
-# 출력 예시: vpc-0123456789abcdef0
+**확인할 부분**:
+```hcl
+# Section 3에서 생성한 Secret 이름 (기본값: dev/openai-api-key, dev/pinecone-api-key)
+# 💡 Terraform이 자동으로 ARN을 조회하므로 이름만 확인하면 됩니다!
+openai_secret_name   = "dev/openai-api-key"
+pinecone_secret_name = "dev/pinecone-api-key"
+```
 
-# 2. Subnet IDs 확인 (최소 2개의 AZ 필요)
-aws ec2 describe-subnets \
-  --filters "Name=vpc-id,Values=vpc-0123456789abcdef0" \
-  --query 'Subnets[*].[SubnetId,AvailabilityZone,MapPublicIpOnLaunch]' \
+**Secret 이름이 다르다면 확인 후 수정**:
+```bash
+# Section 3에서 생성한 Secret 이름 확인
+aws secretsmanager list-secrets \
+  --region ap-northeast-2 \
+  --query 'SecretList[*].Name' \
   --output table
 
 # 출력 예시:
-# subnet-0123456789abcdef0  ap-northeast-2a  True
-# subnet-0123456789abcdef1  ap-northeast-2c  True
+# ---------------------
+# |   ListSecrets     |
+# +-------------------+
+# | dev/openai-api-key|
+# | dev/pinecone-api-key|
+# +-------------------+
 ```
 
-**이 정보만 메모해두세요** - terraform.tfvars 파일에 입력합니다.
+**💡 장점**:
+- ARN 대신 이름만 입력하면 됨 (더 간단!)
+- Terraform이 자동으로 ARN 조회 (Data Source 활용)
+- Secret 이름만 맞으면 어떤 리전/계정에서도 동작
 
-**나머지 리소스는 모두 Terraform이 자동 생성:**
-- ALB (Application Load Balancer)
-- Target Groups
-- Security Groups
-- IAM Roles/Policies
-- ECR Repository
-- ECS Cluster
-- Task Definition
-- ECS Service
+---
 
-### 2. AWS 자격증명 설정
+### Step 2: Terraform 실행
+
+#### 2-1. 초기화 (Provider 다운로드)
 
 ```bash
-# AWS 자격증명 설정
-export AWS_ACCESS_KEY_ID="your-access-key"
-export AWS_SECRET_ACCESS_KEY="your-secret-key"
-export AWS_DEFAULT_REGION="ap-northeast-2"
-```
-
-### 3. Terraform 디렉토리 구조 생성
-
-```bash
-mkdir -p terraform/aws
 cd terraform/aws
-```
-
-### 4. main.tf 작성
-
-`terraform/aws/main.tf` 파일을 생성합니다:
-
-```hcl
-# Provider 설정
-terraform {
-  required_version = ">= 1.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
-# ============================================
-# IAM Roles and Policies
-# ============================================
-
-# ECS Task Execution Role (ECR pull, CloudWatch logs)
-resource "aws_iam_role" "ecs_execution_role" {
-  name = "ecsTaskExecutionRole-${var.environment}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name        = "ecsTaskExecutionRole-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# Attach AWS managed policy for ECS task execution
-resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
-  role       = aws_iam_role.ecs_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-# Additional policy for Secrets Manager access
-resource "aws_iam_role_policy" "ecs_execution_secrets_policy" {
-  name = "ecs-execution-secrets-policy-${var.environment}"
-  role = aws_iam_role.ecs_execution_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "secretsmanager:GetSecretValue",
-        "kms:Decrypt"
-      ]
-      Resource = [
-        var.openai_secret_arn,
-        var.pinecone_secret_arn
-      ]
-    }]
-  })
-}
-
-# ECS Task Role (application runtime permissions)
-resource "aws_iam_role" "ecs_task_role" {
-  name = "ecsTaskRole-${var.environment}"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "ecs-tasks.amazonaws.com"
-      }
-    }]
-  })
-
-  tags = {
-    Name        = "ecsTaskRole-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ============================================
-# ECR Repositories
-# ============================================
-
-# ECR Repository - Backend
-resource "aws_ecr_repository" "backend" {
-  name                 = "backend-${var.environment}"  # backend-tf
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name        = "backend-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ECR Repository - Frontend
-resource "aws_ecr_repository" "frontend" {
-  name                 = "frontend-${var.environment}"  # frontend-tf
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name        = "frontend-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ECS Cluster - Terraform 전용
-resource "aws_ecs_cluster" "main" {
-  name = "agent-cluster-${var.environment}"  # agent-cluster-tf
-
-  tags = {
-    Name        = "agent-cluster-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ============================================
-# Security Groups
-# ============================================
-
-# ALB Security Group (인터넷에서 80/443 허용)
-resource "aws_security_group" "alb" {
-  name        = "alb-sg-${var.environment}"
-  description = "Security group for ALB"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description = "HTTP from internet"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTPS from internet"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name        = "alb-sg-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# Backend Security Group (ALB에서만 8000 포트 허용)
-resource "aws_security_group" "backend" {
-  name        = "backend-sg-${var.environment}"
-  description = "Security group for backend ECS tasks"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Backend port from ALB"
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name        = "backend-sg-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# Frontend Security Group (ALB에서만 80 포트 허용)
-resource "aws_security_group" "frontend" {
-  name        = "frontend-sg-${var.environment}"
-  description = "Security group for frontend ECS tasks"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Frontend port from ALB"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    description = "All outbound traffic"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name        = "frontend-sg-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ============================================
-# Application Load Balancer
-# ============================================
-
-# ALB
-resource "aws_lb" "main" {
-  name               = "agent-alb-${var.environment}"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = var.public_subnet_ids
-
-  enable_deletion_protection = false
-
-  tags = {
-    Name        = "agent-alb-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# Target Group - Backend
-resource "aws_lb_target_group" "backend" {
-  name        = "backend-tg-${var.environment}"
-  port        = 8000
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "ip"
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    path                = "/health"
-    matcher             = "200"
-  }
-
-  tags = {
-    Name        = "backend-tg-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# Target Group - Frontend
-resource "aws_lb_target_group" "frontend" {
-  name        = "frontend-tg-${var.environment}"
-  port        = 80
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "ip"
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    path                = "/"
-    matcher             = "200"
-  }
-
-  tags = {
-    Name        = "frontend-tg-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ALB Listener (HTTP:80)
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
-  }
-}
-
-# ALB Listener Rule - Backend (경로 기반 라우팅)
-resource "aws_lb_listener_rule" "backend" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 100
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/api/*"]
-    }
-  }
-}
-
-# ============================================
-# ECS Cluster
-# ============================================
-
-# ECS Task Definition - Backend
-resource "aws_ecs_task_definition" "backend" {
-  family                   = "backend-${var.environment}"  # backend-tf
-  requires_compatibilities = ["FARGATE"]
-  network_mode            = "awsvpc"
-  cpu                     = var.backend_cpu
-  memory                  = var.backend_memory
-  execution_role_arn      = aws_iam_role.ecs_execution_role.arn
-  task_role_arn           = aws_iam_role.ecs_task_role.arn
-
-  container_definitions = jsonencode([{
-    name  = "backend"
-    image = "${aws_ecr_repository.backend.repository_url}:latest"
-
-    portMappings = [{
-      containerPort = 8000
-      protocol      = "tcp"
-    }]
-
-    environment = [
-      {
-        name  = "ENVIRONMENT"
-        value = var.environment
-      }
-    ]
-
-    secrets = [
-      {
-        name      = "OPENAI_API_KEY"
-        valueFrom = var.openai_secret_arn
-      },
-      {
-        name      = "PINECONE_API_KEY"
-        valueFrom = var.pinecone_secret_arn
-      }
-    ]
-
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = "/ecs/backend-${var.environment}"
-        "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ecs"
-      }
-    }
-
-    healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval    = 30
-      timeout     = 5
-      retries     = 3
-      startPeriod = 60
-    }
-  }])
-
-  tags = {
-    Name        = "backend-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ECS Task Definition - Frontend
-resource "aws_ecs_task_definition" "frontend" {
-  family                   = "frontend-${var.environment}"  # frontend-tf
-  requires_compatibilities = ["FARGATE"]
-  network_mode            = "awsvpc"
-  cpu                     = var.frontend_cpu
-  memory                  = var.frontend_memory
-  execution_role_arn      = aws_iam_role.ecs_execution_role.arn
-  task_role_arn           = aws_iam_role.ecs_task_role.arn
-
-  container_definitions = jsonencode([{
-    name  = "frontend"
-    image = "${aws_ecr_repository.frontend.repository_url}:latest"
-
-    portMappings = [{
-      containerPort = 80
-      protocol      = "tcp"
-    }]
-
-    logConfiguration = {
-      logDriver = "awslogs"
-      options = {
-        "awslogs-group"         = "/ecs/frontend-${var.environment}"
-        "awslogs-region"        = var.aws_region
-        "awslogs-stream-prefix" = "ecs"
-      }
-    }
-  }])
-
-  tags = {
-    Name        = "frontend-${var.environment}"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ECS Service - Backend
-resource "aws_ecs_service" "backend" {
-  name            = "backend-${var.environment}-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.backend.arn
-  desired_count   = var.backend_desired_count
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = var.public_subnet_ids  # Public subnet 사용
-    security_groups  = [aws_security_group.backend.id]  # 새로 생성한 SG
-    assign_public_ip = true  # Public IP 할당
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.backend.arn  # 새로 생성한 TG
-    container_name   = "backend"
-    container_port   = 8000
-  }
-
-  depends_on = [
-    aws_lb_listener.http,
-    aws_lb_listener_rule.backend
-  ]
-
-  tags = {
-    Name        = "backend-${var.environment}-service"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-
-# ECS Service - Frontend
-resource "aws_ecs_service" "frontend" {
-  name            = "frontend-${var.environment}-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.frontend.arn
-  desired_count   = var.frontend_desired_count
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    subnets          = var.public_subnet_ids  # Public subnet 사용
-    security_groups  = [aws_security_group.frontend.id]  # 새로 생성한 SG
-    assign_public_ip = true  # Public IP 할당
-  }
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.frontend.arn  # 새로 생성한 TG
-    container_name   = "frontend"
-    container_port   = 80
-  }
-
-  depends_on = [aws_lb_listener.http]
-
-  tags = {
-    Name        = "frontend-${var.environment}-service"
-    Environment = var.environment
-    ManagedBy   = "Terraform"
-  }
-}
-```
-
-### 5. variables.tf 작성
-
-`terraform/aws/variables.tf` 파일을 생성합니다:
-
-```hcl
-variable "aws_region" {
-  description = "AWS Region"
-  type        = string
-  default     = "ap-northeast-2"
-}
-
-variable "project_name" {
-  description = "Project name (not used in resource names, kept for compatibility)"
-  type        = string
-  default     = "agent-service"
-}
-
-variable "environment" {
-  description = "Environment suffix for resource names (충돌 방지)"
-  type        = string
-  default     = "tf"  # backend-tf, frontend-tf, agent-cluster-tf
-}
-
-# VPC 정보 (기존 VPC 재사용)
-variable "vpc_id" {
-  description = "VPC ID (기본 VPC 사용)"
-  type        = string
-}
-
-variable "public_subnet_ids" {
-  description = "Public Subnet IDs (ALB용, 최소 2개의 AZ)"
-  type        = list(string)
-}
-
-# Secrets Manager ARNs
-variable "openai_secret_arn" {
-  description = "OpenAI API Key Secret ARN"
-  type        = string
-}
-
-variable "pinecone_secret_arn" {
-  description = "Pinecone API Key Secret ARN"
-  type        = string
-}
-
-# Task Definition 설정
-variable "backend_cpu" {
-  description = "Backend task CPU units"
-  type        = string
-  default     = "512"
-}
-
-variable "backend_memory" {
-  description = "Backend task memory (MiB)"
-  type        = string
-  default     = "1024"
-}
-
-variable "frontend_cpu" {
-  description = "Frontend task CPU units"
-  type        = string
-  default     = "256"
-}
-
-variable "frontend_memory" {
-  description = "Frontend task memory (MiB)"
-  type        = string
-  default     = "512"
-}
-
-# Service 설정
-variable "backend_desired_count" {
-  description = "Backend desired task count"
-  type        = number
-  default     = 2
-}
-
-variable "frontend_desired_count" {
-  description = "Frontend desired task count"
-  type        = number
-  default     = 2
-}
-```
-
-### 6. outputs.tf 작성
-
-`terraform/aws/outputs.tf` 파일을 생성합니다:
-
-```hcl
-output "backend_ecr_url" {
-  description = "Backend ECR Repository URL"
-  value       = aws_ecr_repository.backend.repository_url
-}
-
-output "frontend_ecr_url" {
-  description = "Frontend ECR Repository URL"
-  value       = aws_ecr_repository.frontend.repository_url
-}
-
-output "backend_task_definition_arn" {
-  description = "Backend Task Definition ARN"
-  value       = aws_ecs_task_definition.backend.arn
-}
-
-output "frontend_task_definition_arn" {
-  description = "Frontend Task Definition ARN"
-  value       = aws_ecs_task_definition.frontend.arn
-}
-```
-
-### 7. terraform.tfvars 작성
-
-`terraform/aws/terraform.tfvars` 파일을 생성하고, 1단계에서 확인한 VPC 정보를 입력합니다:
-
-```hcl
-aws_region   = "ap-northeast-2"
-project_name = "agent-service"
-environment  = "tf"  # 리소스 이름: backend-tf, frontend-tf, agent-cluster-tf
-
-# VPC 정보 (사전 준비 섹션에서 확인한 값 입력)
-vpc_id             = "vpc-0123456789abcdef0"  # 기본 VPC ID
-public_subnet_ids  = ["subnet-0123456789abcdef0", "subnet-0123456789abcdef1"]  # Public Subnet IDs (최소 2개 AZ)
-
-# Secrets Manager ARNs (Section 3에서 생성한 것)
-openai_secret_arn   = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:prod/openai-api-key-xxxxx"
-pinecone_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:prod/pinecone-api-key-xxxxx"
-
-# Task 설정 (필요시 수정)
-backend_cpu    = "512"
-backend_memory = "1024"
-
-frontend_cpu    = "256"
-frontend_memory = "512"
-
-# Service 설정
-backend_desired_count  = 2
-frontend_desired_count = 2
-```
-
-**간단합니다!** VPC/Subnet ID만 입력하면 나머지는 Terraform이 자동 생성합니다.
-
-### 8. Terraform 실행
-
-```bash
-# 1. 초기화 (Provider 다운로드)
 terraform init
+```
 
-# 2. 포맷팅 (코드 정리)
+**출력 예시**:
+```
+Initializing the backend...
+Initializing provider plugins...
+- Finding hashicorp/aws versions matching "~> 5.0"...
+- Installing hashicorp/aws v5.75.0...
+✅ Terraform has been successfully initialized!
+```
+
+#### 2-2. 포맷팅 (코드 정리)
+
+```bash
 terraform fmt
+```
 
-# 3. 유효성 검사
+코드 스타일을 자동으로 정리합니다.
+
+#### 2-3. 유효성 검사
+
+```bash
 terraform validate
+```
 
-# 4. 실행 계획 확인 (dry-run)
+**출력**:
+```
+✅ Success! The configuration is valid.
+```
+
+#### 2-4. 실행 계획 확인 (Dry-Run)
+
+```bash
 terraform plan
+```
 
-# 출력 예시:
-# Terraform will perform the following actions:
-#
-#   # aws_iam_role.ecs_execution_role will be created
-#   # aws_iam_role.ecs_task_role will be created
-#   # aws_security_group.alb will be created
-#   # aws_security_group.backend will be created
-#   # aws_security_group.frontend will be created
-#   # aws_lb.main will be created
-#   # aws_lb_target_group.backend will be created
-#   # aws_lb_target_group.frontend will be created
-#   # aws_lb_listener.http will be created
-#   # aws_lb_listener_rule.backend will be created
-#   # aws_ecr_repository.backend will be created
-#   # aws_ecr_repository.frontend will be created
-#   # aws_ecs_cluster.main will be created
-#   # aws_ecs_task_definition.backend will be created
-#   # aws_ecs_task_definition.frontend will be created
-#   # aws_ecs_service.backend will be created
-#   # aws_ecs_service.frontend will be created
-#   ...
-#
-# Plan: 19 to add, 0 to change, 0 to destroy.
+**출력 예시**:
+```
+Terraform will perform the following actions:
 
-# 5. 인프라 생성
+  # aws_cloudwatch_log_group.backend will be created
+  + resource "aws_cloudwatch_log_group" "backend" {
+      + name = "/ecs/backend-tf"
+      ...
+    }
+
+  # aws_ecr_repository.backend will be created
+  + resource "aws_ecr_repository" "backend" {
+      + name = "backend-tf"
+      ...
+    }
+
+  # ... (총 21개 리소스 - Dual ALB 아키텍처)
+
+Plan: 21 to add, 0 to change, 0 to destroy.
+```
+
+**확인 사항**:
+- 생성될 리소스 수 (약 21개 - Dual ALB 아키텍처)
+- 리소스 이름이 `-tf` suffix가 붙어 있는지 확인
+- `0 to change, 0 to destroy` 확인 (기존 리소스 영향 없음)
+
+#### 2-5. 인프라 생성!
+
+```bash
 terraform apply
-
-# 확인 프롬프트에서 'yes' 입력
 ```
 
-### 9. 출력 확인
+**출력**:
+```
+Plan: 19 to add, 0 to change, 0 to destroy.
 
+Do you want to perform these actions?
+  Terraform will perform the actions described above.
+  Only 'yes' will be accepted to approve.
+
+  Enter a value:
+```
+
+**`yes` 입력** → ⏱️ 약 3-5분 대기
+
+**완료 출력**:
+```
+Apply complete! Resources: 21 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+backend_alb_dns_name = "backend-alb-tf-1234567890.ap-northeast-2.elb.amazonaws.com"
+backend_ecr_url = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/backend-tf"
+frontend_alb_dns_name = "frontend-alb-tf-1234567890.ap-northeast-2.elb.amazonaws.com"
+frontend_ecr_url = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/frontend-tf"
+...
+```
+
+#### 2-6. 생성된 리소스 확인
+
+**Terraform 출력 확인**:
 ```bash
-# 생성된 리소스 출력
 terraform output
-
-# 예시 출력:
-# backend_ecr_url = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/backend-tf"
-# frontend_ecr_url = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/frontend-tf"
-# backend_task_definition_arn = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/backend-tf:1"
 ```
 
-### 10. 이미지 빌드 및 푸시
+**AWS Console 확인**:
+1. **ECR**: Console > ECR > Repositories > `backend-tf`, `frontend-tf` 확인
+2. **ECS**: Console > ECS > Clusters > `agent-cluster-tf` 확인
+3. **ALB**: Console > EC2 > Load Balancers > `frontend-alb-tf`, `backend-alb-tf` 확인 (Dual ALB)
+4. **CloudWatch**: Console > CloudWatch > Log Groups > `/ecs/backend-tf` 확인
 
-이제 ECR URL을 알았으니, 이미지를 빌드하고 푸시합니다:
+---
+
+### Step 3: 이미지 빌드/푸시 및 배포
+
+#### 3-1. ECR 로그인
 
 ```bash
-# ECR 로그인
 aws ecr get-login-password --region ap-northeast-2 | \
   docker login --username AWS --password-stdin 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
-
-# Backend 이미지 빌드
-docker build -t backend:latest ./backend
-
-# Backend 이미지 태그
-docker tag backend:latest 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/backend-tf:latest
-
-# Backend 이미지 푸시
-docker push 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/backend-tf:latest
-
-# Frontend도 동일하게 수행
-docker build -t frontend:latest ./frontend
-docker tag frontend:latest 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/frontend-tf:latest
-docker push 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/frontend-tf:latest
 ```
 
-### 11. 서비스 확인
+**출력**: `Login Succeeded`
+
+#### 3-2. docker-compose로 이미지 빌드 및 푸시
+
+**환경 변수 설정**:
+```bash
+# 프로젝트 루트로 이동
+cd ../..
+
+# AWS 계정 ID 및 리전 설정
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export AWS_REGION=ap-northeast-2
+
+# docker-compose를 위한 이미지 URL 설정
+export BACKEND_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend-tf:latest"
+export FRONTEND_IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/frontend-tf:latest"
+
+# 설정 확인
+echo "Backend Image: $BACKEND_IMAGE"
+echo "Frontend Image: $FRONTEND_IMAGE"
+```
+
+**docker-compose로 빌드 및 푸시**:
+```bash
+# Backend와 Frontend 동시 빌드
+docker-compose build
+
+# Backend와 Frontend 동시 푸시
+docker-compose push
+```
+
+**💡 작동 원리**:
+- `docker-compose.yml`은 `${BACKEND_IMAGE}`, `${FRONTEND_IMAGE}` 환경 변수 사용
+- AWS/GCP 환경에 따라 다른 레지스트리 URL 설정 가능
+- 로컬 개발 시에는 기본값(`backend:latest`, `frontend:latest`) 사용
+
+**💡 장점**:
+- 한 번의 명령으로 모든 서비스 빌드/푸시
+- docker-compose.yml에서 이미지 URL 중앙 관리
+- Section 2에서 배운 docker-compose 지식 활용
+
+**개별 서비스만 빌드/푸시하려면**:
+```bash
+# Backend만
+docker-compose build backend
+docker-compose push backend
+
+# Frontend만
+docker-compose build frontend
+docker-compose push frontend
+```
+
+**💡 Tip**: `terraform output backend_ecr_url`로 ECR URL 확인 가능
+
+#### 3-3. ECS Service 강제 재배포
+
+이미지를 푸시한 후, ECS가 새 이미지를 사용하도록 강제 재배포:
 
 ```bash
-# ECS 서비스 상태 확인 (새로 만든 Cluster 사용)
+# Backend Service 재배포
+aws ecs update-service \
+  --cluster agent-cluster-tf \
+  --service backend-tf-service \
+  --force-new-deployment \
+  --region ap-northeast-2
+
+# Frontend Service 재배포
+aws ecs update-service \
+  --cluster agent-cluster-tf \
+  --service frontend-tf-service \
+  --force-new-deployment \
+  --region ap-northeast-2
+```
+
+#### 3-4. 배포 상태 확인
+
+```bash
+# Service 상태 확인
 aws ecs describe-services \
   --cluster agent-cluster-tf \
   --services backend-tf-service frontend-tf-service \
-  --region ap-northeast-2
-
-# Task 실행 상태 확인
-aws ecs list-tasks \
-  --cluster agent-cluster-tf \
-  --service-name backend-tf-service \
-  --region ap-northeast-2
-
-# ALB를 통해 접속 테스트
-curl http://agent-service-alb-xxxx.ap-northeast-2.elb.amazonaws.com/health
+  --region ap-northeast-2 \
+  --query 'services[*].[serviceName,status,runningCount,desiredCount]' \
+  --output table
 ```
 
-## GCP 인프라 관리
+**출력 예시**:
+```
+-------------------------------------------
+|          DescribeServices             |
++----------------------+--------+---+----+
+| backend-tf-service   | ACTIVE | 2 | 2  |
+| frontend-tf-service  | ACTIVE | 2 | 2  |
++----------------------+--------+---+----+
+```
 
-### 1. 사전 준비
-
-**GCP는 모든 리소스를 Terraform으로 생성합니다.** 프로젝트 ID만 있으면 됩니다!
+#### 3-5. Dual ALB로 서비스 접속
 
 ```bash
-# 1. gcloud 인증
-gcloud auth application-default login
+# Frontend ALB DNS Name 확인
+terraform output frontend_alb_dns_name
+# 출력: frontend-alb-tf-1234567890.ap-northeast-2.elb.amazonaws.com
 
-# 2. 프로젝트 ID 확인
-gcloud projects list
+# Backend ALB DNS Name 확인
+terraform output backend_alb_dns_name
+# 출력: backend-alb-tf-1234567890.ap-northeast-2.elb.amazonaws.com
 
-# 출력 예시:
-# PROJECT_ID          NAME                PROJECT_NUMBER
-# my-project-12345    My Project          123456789012
+# 브라우저 접속
+# Frontend 접속
+open http://frontend-alb-tf-1234567890.ap-northeast-2.elb.amazonaws.com
 
-# 3. 프로젝트 설정
-export GCP_PROJECT_ID="my-project-12345"
-gcloud config set project $GCP_PROJECT_ID
+# Backend API 접속
+curl http://backend-alb-tf-1234567890.ap-northeast-2.elb.amazonaws.com/health
 ```
 
-**Terraform이 자동 생성할 리소스:**
-- Artifact Registry (컨테이너 이미지 저장소)
-- Cloud Run Services (Backend, Frontend)
-- Secret Manager Secrets (API Keys 저장)
-- IAM Service Accounts (Cloud Run 실행 권한)
-- IAM Policy Bindings (권한 연결)
+**확인 사항**:
+- Frontend ALB로 Frontend 페이지가 로드되는지
+- Backend ALB로 `/health` 엔드포인트가 `{"status": "healthy"}` 응답하는지
+- **Section 3와 동일한 Dual ALB 아키텍처**로 서비스가 완전히 분리되어 있는지
 
-**간단합니다!** 프로젝트 ID만 있으면 `terraform apply` 한 번으로 전체 인프라가 생성됩니다.
+---
 
-### 2. Terraform 디렉토리 구조 생성
-
-```bash
-mkdir -p terraform/gcp
-cd terraform/gcp
-```
-
-### 3. main.tf 작성
-
-`terraform/gcp/main.tf` 파일을 생성합니다:
-
-```hcl
-# Provider 설정
-terraform {
-  required_version = ">= 1.0"
-
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "google" {
-  project = var.gcp_project_id
-  region  = var.gcp_region
-}
-
-# ============================================
-# Secret Manager
-# ============================================
-
-# Secret Manager Secret - OpenAI API Key
-resource "google_secret_manager_secret" "openai_api_key" {
-  secret_id = "openai-api-key"
-
-  replication {
-    auto {}
-  }
-
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-  }
-}
-
-# Secret Manager Secret Version - OpenAI
-resource "google_secret_manager_secret_version" "openai_api_key" {
-  secret      = google_secret_manager_secret.openai_api_key.id
-  secret_data = var.openai_api_key  # terraform.tfvars에서 입력
-}
-
-# Secret Manager Secret - Pinecone API Key
-resource "google_secret_manager_secret" "pinecone_api_key" {
-  secret_id = "pinecone-api-key"
-
-  replication {
-    auto {}
-  }
-
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-  }
-}
-
-# Secret Manager Secret Version - Pinecone
-resource "google_secret_manager_secret_version" "pinecone_api_key" {
-  secret      = google_secret_manager_secret.pinecone_api_key.id
-  secret_data = var.pinecone_api_key  # terraform.tfvars에서 입력
-}
-
-# ============================================
-# IAM Service Account
-# ============================================
-
-# Service Account for Cloud Run
-resource "google_service_account" "cloudrun" {
-  account_id   = "cloudrun-sa-${var.environment}"
-  display_name = "Cloud Run Service Account (${var.environment})"
-  description  = "Service account for Cloud Run services"
-}
-
-# Grant Secret Manager access to Service Account
-resource "google_secret_manager_secret_iam_member" "openai_access" {
-  secret_id = google_secret_manager_secret.openai_api_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cloudrun.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "pinecone_access" {
-  secret_id = google_secret_manager_secret.pinecone_api_key.id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cloudrun.email}"
-}
-
-# ============================================
-# Artifact Registry
-# ============================================
-
-# Artifact Registry Repository
-resource "google_artifact_registry_repository" "main" {
-  location      = var.gcp_region
-  repository_id = "${var.project_name}-${var.environment}"
-  description   = "Docker repository for ${var.project_name}"
-  format        = "DOCKER"
-
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-  }
-}
-
-# ============================================
-# Cloud Run Services
-# ============================================
-
-# Cloud Run Service - Backend
-resource "google_cloud_run_service" "backend" {
-  name     = "${var.project_name}-${var.environment}-backend"
-  location = var.gcp_region
-
-  template {
-    spec {
-      service_account_name = google_service_account.cloudrun.email  # Service Account 연결
-
-      containers {
-        image = "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.main.repository_id}/backend:latest"
-
-        ports {
-          container_port = 8000
-        }
-
-        env {
-          name  = "ENVIRONMENT"
-          value = var.environment
-        }
-
-        env {
-          name = "OPENAI_API_KEY"
-          value_from {
-            secret_key_ref {
-              name = google_secret_manager_secret.openai_api_key.secret_id
-              key  = "latest"
-            }
-          }
-        }
-
-        env {
-          name = "PINECONE_API_KEY"
-          value_from {
-            secret_key_ref {
-              name = google_secret_manager_secret.pinecone_api_key.secret_id
-              key  = "latest"
-            }
-          }
-        }
-
-        resources {
-          limits = {
-            cpu    = var.backend_cpu
-            memory = var.backend_memory
-          }
-        }
-      }
-
-      container_concurrency = 80
-      timeout_seconds       = 300
-    }
-
-    metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale" = var.backend_min_instances
-        "autoscaling.knative.dev/maxScale" = var.backend_max_instances
-      }
-    }
-  }
-
-  traffic {
-    percent         = 100
-    latest_revision = true
-  }
-
-  metadata {
-    labels = {
-      environment = var.environment
-      managed_by  = "terraform"
-    }
-  }
-}
-
-# Cloud Run Service - Frontend
-resource "google_cloud_run_service" "frontend" {
-  name     = "${var.project_name}-${var.environment}-frontend"
-  location = var.gcp_region
-
-  template {
-    spec {
-      service_account_name = google_service_account.cloudrun.email  # Service Account 연결
-
-      containers {
-        image = "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.main.repository_id}/frontend:latest"
-
-        ports {
-          container_port = 80
-        }
-
-        resources {
-          limits = {
-            cpu    = var.frontend_cpu
-            memory = var.frontend_memory
-          }
-        }
-      }
-
-      container_concurrency = 80
-      timeout_seconds       = 300
-    }
-
-    metadata {
-      annotations = {
-        "autoscaling.knative.dev/minScale" = var.frontend_min_instances
-        "autoscaling.knative.dev/maxScale" = var.frontend_max_instances
-      }
-    }
-  }
-
-  traffic {
-    percent         = 100
-    latest_revision = true
-  }
-
-  metadata {
-    labels = {
-      environment = var.environment
-      managed_by  = "terraform"
-    }
-  }
-}
-
-# IAM Policy - Backend (공개 접근)
-resource "google_cloud_run_service_iam_member" "backend_public" {
-  service  = google_cloud_run_service.backend.name
-  location = google_cloud_run_service.backend.location
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
-
-# IAM Policy - Frontend (공개 접근)
-resource "google_cloud_run_service_iam_member" "frontend_public" {
-  service  = google_cloud_run_service.frontend.name
-  location = google_cloud_run_service.frontend.location
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
-```
-
-### 4. variables.tf 작성
-
-`terraform/gcp/variables.tf` 파일을 생성합니다:
-
-```hcl
-variable "gcp_project_id" {
-  description = "GCP Project ID"
-  type        = string
-}
-
-variable "gcp_region" {
-  description = "GCP Region"
-  type        = string
-  default     = "asia-northeast3"
-}
-
-variable "project_name" {
-  description = "Project name (not used in resource names, kept for compatibility)"
-  type        = string
-  default     = "agent-service"
-}
-
-variable "environment" {
-  description = "Environment suffix for resource names (충돌 방지)"
-  type        = string
-  default     = "terraform"  # backend-terraform, frontend-terraform
-}
-
-# Backend 설정
-variable "backend_cpu" {
-  description = "Backend CPU limit"
-  type        = string
-  default     = "2"
-}
-
-variable "backend_memory" {
-  description = "Backend memory limit"
-  type        = string
-  default     = "2Gi"
-}
-
-variable "backend_min_instances" {
-  description = "Backend minimum instances"
-  type        = string
-  default     = "0"
-}
-
-variable "backend_max_instances" {
-  description = "Backend maximum instances"
-  type        = string
-  default     = "10"
-}
-
-# Frontend 설정
-variable "frontend_cpu" {
-  description = "Frontend CPU limit"
-  type        = string
-  default     = "1"
-}
-
-variable "frontend_memory" {
-  description = "Frontend memory limit"
-  type        = string
-  default     = "512Mi"
-}
-
-variable "frontend_min_instances" {
-  description = "Frontend minimum instances"
-  type        = string
-  default     = "0"
-}
-
-variable "frontend_max_instances" {
-  description = "Frontend maximum instances"
-  type        = string
-  default     = "10"
-}
-
-# API Keys (Secret Manager에 저장할 값)
-variable "openai_api_key" {
-  description = "OpenAI API Key (will be stored in Secret Manager)"
-  type        = string
-  sensitive   = true
-}
-
-variable "pinecone_api_key" {
-  description = "Pinecone API Key (will be stored in Secret Manager)"
-  type        = string
-  sensitive   = true
-}
-```
-
-### 5. outputs.tf 작성
-
-`terraform/gcp/outputs.tf` 파일을 생성합니다:
-
-```hcl
-output "artifact_registry_url" {
-  description = "Artifact Registry URL"
-  value       = "${var.gcp_region}-docker.pkg.dev/${var.gcp_project_id}/${google_artifact_registry_repository.main.repository_id}"
-}
-
-output "backend_url" {
-  description = "Backend Cloud Run Service URL"
-  value       = google_cloud_run_service.backend.status[0].url
-}
-
-output "frontend_url" {
-  description = "Frontend Cloud Run Service URL"
-  value       = google_cloud_run_service.frontend.status[0].url
-}
-```
-
-### 6. terraform.tfvars 작성
-
-`terraform/gcp/terraform.tfvars` 파일을 생성합니다:
-
-```hcl
-gcp_project_id = "your-gcp-project-id"
-gcp_region     = "asia-northeast3"
-project_name   = "agent-service"
-environment    = "terraform"  # 리소스 이름: agent-service-terraform-backend
-
-# API Keys (Secret Manager에 저장됨)
-openai_api_key   = "sk-xxxxxxxxxxxxxxxxxxxx"  # 실제 OpenAI API Key
-pinecone_api_key = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # 실제 Pinecone API Key
-
-# Backend 설정 (필요시 수정)
-backend_cpu           = "2"
-backend_memory        = "2Gi"
-backend_min_instances = "0"
-backend_max_instances = "10"
-
-# Frontend 설정
-frontend_cpu           = "1"
-frontend_memory        = "512Mi"
-frontend_min_instances = "0"
-frontend_max_instances = "10"
-```
-
-**간단합니다!** 프로젝트 ID와 API Keys만 입력하면 Terraform이 모든 리소스를 자동 생성합니다!
-
-### 7. Terraform 실행
-
-```bash
-# 1. 초기화
-terraform init
-
-# 2. 포맷팅
-terraform fmt
-
-# 3. 유효성 검사
-terraform validate
-
-# 4. 실행 계획 확인
-terraform plan
-
-# 5. 인프라 생성
-terraform apply
-
-# 확인 프롬프트에서 'yes' 입력
-```
-
-### 8. 출력 확인
-
-```bash
-# 생성된 리소스 출력
-terraform output
-
-# 예시 출력:
-# artifact_registry_url = "asia-northeast3-docker.pkg.dev/your-project-id/agent-service-terraform"
-# backend_url = "https://agent-service-terraform-backend-abc123-an.a.run.app"
-# frontend_url = "https://agent-service-terraform-frontend-def456-an.a.run.app"
-```
-
-### 9. 이미지 빌드 및 푸시
-
-```bash
-# Artifact Registry 인증
-gcloud auth configure-docker asia-northeast3-docker.pkg.dev
-
-# 환경변수 설정
-export GCP_PROJECT_ID="your-project-id"
-export ARTIFACT_REGISTRY="asia-northeast3-docker.pkg.dev/$GCP_PROJECT_ID/agent-service-terraform"
-
-# Backend 이미지 빌드
-docker build --platform linux/amd64 -t backend:latest ./backend
-
-# Backend 이미지 태그
-docker tag backend:latest $ARTIFACT_REGISTRY/backend:latest
-
-# Backend 이미지 푸시
-docker push $ARTIFACT_REGISTRY/backend:latest
-
-# Frontend도 동일하게 수행
-docker build --platform linux/amd64 -t frontend:latest ./frontend
-docker tag frontend:latest $ARTIFACT_REGISTRY/frontend:latest
-docker push $ARTIFACT_REGISTRY/frontend:latest
-```
-
-### 10. Cloud Run 서비스 업데이트
-
-이미지를 푸시한 후, Cloud Run 서비스가 자동으로 업데이트됩니다. 강제로 재배포하려면:
-
-```bash
-# Backend 재배포 (Terraform으로 만든 서비스)
-gcloud run services update agent-service-terraform-backend \
-  --region asia-northeast3
-
-# Frontend 재배포
-gcloud run services update agent-service-terraform-frontend \
-  --region asia-northeast3
-```
-
-### 11. 서비스 확인
-
-```bash
-# 서비스 상태 확인 (Terraform으로 만든 서비스)
-gcloud run services describe agent-service-terraform-backend \
-  --region asia-northeast3
-
-gcloud run services describe agent-service-terraform-frontend \
-  --region asia-northeast3
-
-# Health check
-BACKEND_URL=$(terraform output -raw backend_url)
-curl $BACKEND_URL/health
-```
-
-## Terraform 주요 명령어
+## 📊 Terraform 주요 명령어
 
 ### 기본 워크플로우
 ```bash
-# 1. 초기화 (최초 1회, Provider 설치)
-terraform init
-
-# 2. 포맷팅 (코드 정리)
-terraform fmt
-
-# 3. 유효성 검사
-terraform validate
-
-# 4. 실행 계획 확인 (dry-run)
-terraform plan
-
-# 5. 변경 적용
-terraform apply
-
-# 6. 특정 리소스만 적용
-terraform apply -target=aws_ecs_service.backend
-
-# 7. 리소스 삭제
-terraform destroy
+terraform init      # Provider 다운로드 (최초 1회)
+terraform fmt       # 코드 포맷팅
+terraform validate  # 문법 검사
+terraform plan      # 실행 계획 확인 (dry-run)
+terraform apply     # 변경 적용
+terraform destroy   # 모든 리소스 삭제
 ```
 
-### State 관리
+### 유용한 명령어
 ```bash
+# 특정 리소스만 적용
+terraform apply -target=aws_ecs_service.backend
+
+# 변경 사항 미리보기 (파일로 저장)
+terraform plan -out=tfplan
+
+# 저장된 플랜 적용
+terraform apply tfplan
+
 # State 목록 보기
 terraform state list
 
 # 특정 리소스 상태 보기
 terraform state show aws_ecr_repository.backend
 
-# State에서 리소스 제거 (실제 리소스는 유지)
-terraform state rm aws_ecr_repository.backend
+# 출력 값 확인
+terraform output
+terraform output backend_ecr_url
+```
 
-# State 백업
+## 🔄 Terraform State 관리
+
+### State란?
+- 현재 인프라 상태를 추적하는 JSON 파일 (`terraform.tfstate`)
+- **매우 중요**: 이 파일이 없으면 Terraform이 리소스를 관리할 수 없음!
+- **민감 정보 포함**: Resource IDs, Secret ARNs (자동 조회된 값) 등
+
+### 로컬 State (학습용)
+```bash
+# 기본값: terraform.tfstate 파일로 로컬 저장
+# ✅ 간편함
+# ❌ 협업 불가능
+# ❌ 백업 필요
+```
+
+**백업 방법**:
+```bash
 cp terraform.tfstate terraform.tfstate.backup
 ```
 
-### 출력 관리
-```bash
-# 모든 출력 보기
-terraform output
-
-# 특정 출력만 보기
-terraform output backend_ecr_url
-
-# JSON 포맷으로 출력
-terraform output -json
-```
-
-## Terraform State 관리
-
-### State란?
-- Terraform이 관리하는 인프라의 현재 상태
-- `terraform.tfstate` 파일에 JSON 형식으로 저장
-- **매우 중요**: 이 파일이 없으면 인프라 관리 불가능
-
-### State 저장 위치
-
-#### 로컬 State (기본, 학습용)
+### 원격 State (팀 협업 시 권장)
 ```hcl
-# 별도 설정 없음 → terraform.tfstate 파일로 로컬 저장
-# ⚠️ 협업 불가능, 동기화 문제, 백업 필요
-```
-
-**학습용으로는 충분하지만, 프로덕션에서는 원격 State 사용 권장**
-
-#### 원격 State (프로덕션 권장)
-```hcl
-# AWS S3 Backend
+# main.tf에 추가
 terraform {
   backend "s3" {
     bucket         = "your-terraform-state-bucket"
     key            = "agent-service/terraform.tfstate"
     region         = "ap-northeast-2"
-    dynamodb_table = "terraform-locks"  # Lock 방지
+    dynamodb_table = "terraform-locks"  # State Lock (동시 수정 방지)
     encrypt        = true
   }
 }
+```
 
-# GCP GCS Backend
-terraform {
-  backend "gcs" {
-    bucket = "your-terraform-state-bucket"
-    prefix = "agent-service/terraform.tfstate"
+**장점**:
+- ✅ 팀원 모두 같은 State 공유
+- ✅ 동시 수정 방지 (State Lock)
+- ✅ 자동 백업 (S3 버전 관리)
+
+## 🛠️ 트러블슈팅
+
+### 1. VPC를 찾을 수 없음
+**증상**: `Error: No default VPC found`
+
+**해결**:
+```bash
+# VPC 확인
+aws ec2 describe-vpcs --filters "Name=isDefault,Values=true"
+
+# 없으면 새로 생성하거나 기존 VPC ID를 terraform.tfvars에 직접 입력
+```
+
+### 2. Subnet 수 부족
+**증상**: `Error: At least 2 subnets in different AZs are required`
+
+**해결**:
+```bash
+# Subnet 확인
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-xxxxx" \
+  --query 'Subnets[*].[SubnetId,AvailabilityZone]' --output table
+
+# terraform.tfvars에 서로 다른 AZ의 Subnet 2개 이상 입력
+```
+
+### 3. Secret을 찾을 수 없음
+**증상**: `Error: no matching Secrets Manager secret found`
+
+**원인**: Secret 이름이 잘못되었거나 Section 3에서 Secret을 생성하지 않음
+
+**해결**:
+```bash
+# 1. Secret 이름 확인
+aws secretsmanager list-secrets \
+  --region ap-northeast-2 \
+  --query 'SecretList[*].Name'
+
+# 2. Secret이 없다면 Section 3 문서를 참고하여 생성
+aws secretsmanager create-secret \
+  --name dev/openai-api-key \
+  --secret-string "your-openai-api-key"
+
+# 3. terraform.tfvars에 정확한 Secret 이름 입력
+openai_secret_name = "dev/openai-api-key"
+```
+
+### 4. ECR 이미지가 없음
+**증상**: `Error: CannotPullContainerError: pull image manifest has been retried`
+
+**원인**: Terraform이 Task Definition을 생성했지만, ECR에 이미지가 아직 없음
+
+**해결**:
+```bash
+# 1. 이미지 푸시 (Step 3-2, 3-3)
+docker push <ECR_URL>:latest
+
+# 2. Service 강제 재배포
+aws ecs update-service --cluster agent-cluster-tf \
+  --service backend-tf-service \
+  --force-new-deployment
+```
+
+### 5. State Lock 에러
+**증상**: `Error: Error acquiring the state lock`
+
+**원인**: 다른 사람이 terraform apply 중이거나, 이전 실행이 비정상 종료됨
+
+**해결**:
+```bash
+# 다른 사람이 실행 중인지 확인 후, 안전하면 Lock 강제 해제
+terraform force-unlock <LOCK_ID>
+```
+
+### 6. 리소스 이미 존재
+**증상**: `Error: Resource already exists`
+
+**원인**: Section 3에서 만든 리소스와 이름 충돌
+
+**해결**:
+- `terraform.tfvars`에서 `environment = "tf"` 확인
+- 리소스 이름이 `-tf` suffix가 붙는지 확인 (`backend-tf`, not `backend`)
+
+## 🧹 리소스 정리
+
+### 전체 삭제
+```bash
+cd terraform/aws
+terraform destroy
+```
+
+**출력**:
+```
+Plan: 0 to add, 0 to change, 19 to destroy.
+
+Do you really want to destroy all resources?
+  Enter a value: yes
+```
+
+**⏱️ 약 5-10분 소요**
+
+### 특정 리소스만 삭제
+```bash
+terraform destroy -target=aws_ecs_service.backend
+```
+
+### 삭제 확인
+```bash
+# State에 리소스가 없는지 확인
+terraform state list
+# 출력: (비어 있음)
+
+# AWS Console에서도 확인
+```
+
+## 💰 비용 관리
+
+### Terraform으로 생성한 리소스 비용 (서울 리전)
+
+| 리소스 | 비용 | 설명 |
+|--------|------|------|
+| ECR | $0.10/GB/월 | 이미지 스토리지 |
+| ECS Fargate (Backend) | ~$35/월 | 2 tasks × 0.5 vCPU × 1 GB × 24h × 30d |
+| ECS Fargate (Frontend) | ~$9/월 | 2 tasks × 0.25 vCPU × 512 MB × 24h × 30d |
+| ALB | ~$27/월 | ALB 운영 비용 + 데이터 처리 |
+| CloudWatch Logs | ~$1/월 | 로그 저장 (7일 보관) |
+| **Total** | **~$72/월** | 상시 운영 시 |
+
+### 비용 절감 팁
+
+**1. 개발 환경은 사용 시에만 생성**:
+```bash
+# 작업 시작
+terraform apply
+
+# 작업 종료
+terraform destroy  # ← 비용 0원!
+```
+
+**2. Desired Count 조정**:
+```hcl
+# terraform.tfvars
+backend_desired_count  = 1  # 2 → 1 (50% 절감)
+frontend_desired_count = 1
+```
+
+**3. Auto Scaling 비활성화** (개발 환경):
+- 고정 Task 수로 운영 → 예측 가능한 비용
+
+---
+
+# Part 2: GCP Terraform 배포
+
+이 섹션에서는 **GCP Cloud Run**을 Terraform으로 배포합니다.
+Section 4에서 수동으로 구축했던 서버리스 인프라를 코드로 자동화하는 과정을 배웁니다.
+
+## 🌟 왜 GCP도 배우는가?
+
+### AWS vs GCP 아키텍처 차이
+
+**AWS (ECS/Fargate + ALB)**:
+- VPC, Subnet, Security Group 설정 필요
+- ALB + Target Group + Listener 구성
+- ECS Cluster + Task Definition + Service 생성
+- 총 **8개 이상의 리소스** 관리 필요
+
+**GCP (Cloud Run)**:
+- **단 하나의 리소스**로 모든 기능 제공
+- VPC, Load Balancer 등 인프라 관리 불필요
+- 완전 서버리스, 자동 스케일링 (0 ↔ N)
+- HTTPS 자동 제공
+
+### 핵심 차이점
+
+| 항목 | AWS (ECS/Fargate) | GCP (Cloud Run) |
+|------|-------------------|-----------------|
+| **인프라 복잡도** | 높음 (VPC, ALB, SG 등) | 낮음 (서비스 1개) |
+| **네트워크 관리** | 수동 (Subnet, SG) | 자동 (완전 관리형) |
+| **로드 밸런서** | ALB 필수 | 자동 제공 |
+| **HTTPS** | Certificate Manager 설정 | 자동 제공 |
+| **스케일링** | 고정 Task 수 (desired_count) | 자동 (0↔N, min/max) |
+| **비용** | 상시 운영 (~$72/월) | 사용량 기반 (~$10/월) |
+| **설정 변수** | 10개+ (VPC, Subnet 등) | 4개 (project_id만 필수) |
+| **리소스 수** | 21개 (Dual ALB) | 4개 |
+
+### Cloud Run의 특징
+
+1. **완전 서버리스**: 요청 없을 때 0으로 축소 → 비용 0원
+2. **자동 스케일링**: 트래픽 증가 시 자동 확장 (최대 100개)
+3. **자동 HTTPS**: Let's Encrypt 인증서 자동 발급
+4. **자동 로드밸런싱**: 여러 인스턴스 간 트래픽 자동 분산
+5. **간단한 배포**: 이미지 푸시 시 자동 감지 및 재배포
+
+## 🗂️ Terraform 파일 구조
+
+GCP Terraform 파일들 (`terraform/gcp/`):
+
+```
+terraform/gcp/
+├── main.tf                     # GCP Provider 설정
+├── variables.tf                # 변수 정의
+├── artifact-registry.tf        # Container Registry (AWS ECR과 유사)
+├── cloud-run.tf                # Backend/Frontend 서비스
+├── iam.tf                      # Secret Manager 권한
+├── outputs.tf                  # 출력 정의
+└── terraform.tfvars.example    # 변수 값 예시
+```
+
+### AWS vs GCP 파일 비교
+
+| AWS 파일 | GCP 파일 | 설명 |
+|----------|----------|------|
+| `ecr.tf` | `artifact-registry.tf` | 컨테이너 레지스트리 |
+| `ecs.tf` + `network.tf` | `cloud-run.tf` | 컴퓨트 + 네트워크 통합 |
+| `iam.tf` | `iam.tf` | IAM 권한 |
+| `cloudwatch.tf` | ❌ 불필요 | Cloud Run이 자동 로깅 |
+| `network.tf` (ALB, SG) | ❌ 불필요 | Cloud Run이 자동 제공 |
+
+GCP가 **3개 파일 적음** → 더 간단한 인프라!
+
+## 🎯 Terraform이 생성할 GCP 리소스
+
+### ✅ Terraform으로 생성
+
+1. **Artifact Registry Repository** (`agent-tf`)
+   - Docker 이미지 저장소 (AWS ECR과 동일)
+
+2. **Cloud Run Services** (2개)
+   - `backend-tf`: FastAPI 백엔드 서비스
+   - `frontend-tf`: Nginx 프론트엔드 서비스
+
+3. **IAM Policy Bindings** (2개)
+   - Secret Manager 접근 권한
+   - Public 접근 허용 (allUsers)
+
+**총 4개 리소스** (AWS 19개 vs GCP 4개)
+
+### ♻️ Section 4 리소스 재사용
+
+- **Secret Manager Secrets**: Section 4에서 생성한 `openai-api-key`, `pinecone-api-key` 재사용
+- 이유: Secret은 한번 생성 후 여러 서비스에서 공유
+
+## 📚 GCP Terraform 핵심 개념
+
+### 1. Provider
+
+```hcl
+# main.tf
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+```
+
+AWS와 달리 **Project ID**가 필수입니다.
+
+### 2. Resource - Artifact Registry
+
+```hcl
+# artifact-registry.tf
+resource "google_artifact_registry_repository" "agent" {
+  repository_id = "agent-tf"
+  location      = var.region
+  format        = "DOCKER"
+}
+```
+
+AWS ECR과 동일한 역할의 컨테이너 레지스트리
+
+### 3. Resource - Cloud Run
+
+```hcl
+# cloud-run.tf
+resource "google_cloud_run_v2_service" "backend" {
+  name     = "backend-tf"
+  location = var.region
+
+  template {
+    scaling {
+      min_instance_count = 0  # 완전 서버리스!
+      max_instance_count = 10
+    }
+
+    containers {
+      image = "..."
+
+      env {
+        name  = "ENVIRONMENT"
+        value = "development"
+      }
+
+      env {
+        name = "OPENAI_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = "openai-api-key"  # Secret 이름만 참조
+            version = "latest"
+          }
+        }
+      }
+    }
   }
 }
 ```
 
-### State Lock
-- 여러 사람이 동시에 `terraform apply` 실행 방지
-- AWS: DynamoDB 테이블 사용
-- GCP: 자동 Lock 지원
+AWS ECS + ALB + Auto Scaling을 **하나의 리소스**로!
 
-## 변수 관리 전략
+### 4. Variable
 
-### 1. 환경별 변수 분리
-```bash
-# 디렉토리 구조
-terraform/aws/
-├── environments/
-│   ├── dev/
-│   │   └── terraform.tfvars
-│   ├── staging/
-│   │   └── terraform.tfvars
-│   └── prod/
-│       └── terraform.tfvars
-```
-
-### 2. Sensitive 변수 보호
 ```hcl
-variable "openai_api_key" {
-  type      = string
-  sensitive = true  # Plan/Apply 출력에서 마스킹
+# variables.tf
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "backend_min_instances" {
+  description = "최소 인스턴스 (0 = 완전 서버리스)"
+  type        = number
+  default     = 0
 }
 ```
 
-### 3. 환경변수 사용
+### 5. Output
+
+```hcl
+# outputs.tf
+output "backend_url" {
+  description = "Backend Service URL"
+  value       = google_cloud_run_v2_service.backend.uri
+  # 예시: https://backend-tf-xxxxx-an.a.run.app
+}
+```
+
+HTTPS URL이 자동으로 제공됩니다!
+
+## 🚀 실습: 3단계로 완성하는 GCP Terraform 배포
+
+### Step 1: 사전 준비 및 Project 정보 확인
+
+#### 1-1. gcloud CLI 설치 확인
+
+**macOS/Linux**:
 ```bash
-# TF_VAR_ 접두사로 변수 주입
-export TF_VAR_gcp_project_id="your-project-id"
-terraform apply
+# 설치 확인
+gcloud version
+
+# 설치 안 되어 있다면: https://cloud.google.com/sdk/docs/install
 ```
 
-## 비용 관리
-
-### AWS 비용 추정 (Terraform으로 관리하는 리소스)
-```
-ECR: $0.10/GB/month (스토리지)
-ECS Fargate: 사용량 기반
-  - vCPU: $0.04856/vCPU/hour
-  - Memory: $0.00532/GB/hour
-
-예시) Backend 2 tasks * 0.5 vCPU * 24h * 30d = ~$35/month
-```
-
-### GCP 비용 추정 (Terraform으로 관리하는 리소스)
-```
-Artifact Registry: $0.10/GB/month (스토리지)
-Cloud Run:
-  - vCPU: $0.00002400/vCPU-second
-  - Memory: $0.00000250/GiB-second
-  - Requests: $0.40/million requests
-무료 할당량: 월 200만 요청, 36만 vCPU-second
-```
-
-### 비용 최적화 팁
-1. **개발 환경**: 필요 시에만 인프라 생성
-   ```bash
-   # 작업 시작
-   terraform apply
-
-   # 작업 완료 후 삭제
-   terraform destroy
-   ```
-
-2. **Auto Scaling 활용**: 트래픽에 따라 자동 조절
-3. **리소스 크기 최적화**: 필요한 만큼만 할당
-
-## 트러블슈팅
-
-### State Lock 에러
-```
-Error: Error acquiring the state lock
-```
-**해결**:
+**인증 및 프로젝트 설정**:
 ```bash
-# Lock 강제 해제 (주의: 다른 사람이 실행 중이 아닌지 확인!)
-terraform force-unlock LOCK_ID
+# 로그인
+gcloud auth login
+
+# 프로젝트 설정
+gcloud config set project YOUR_PROJECT_ID
+
+# 현재 프로젝트 확인
+gcloud config get-value project
+
+# Application Default Credentials 설정 (Terraform용 - 필수!)
+gcloud auth application-default login
+
+# 브라우저 인증 문제 발생 시:
+# gcloud auth application-default login --no-browser
+# → 출력된 URL을 브라우저에 복사 → 인증 코드 복사 → 터미널에 붙여넣기
+
+# 인증 성공 확인
+gcloud auth application-default print-access-token
 ```
 
-### Provider 버전 충돌
-```
-Error: Incompatible provider version
-```
-**해결**:
+**💡 중요**:
+- `gcloud auth login`: gcloud 명령어용 인증
+- `gcloud auth application-default login`: **Terraform/SDK용 인증 (필수!)**
+
+#### 1-1-1. 필수 API 활성화
+
+**⚠️ 중요**: GCP는 보안상 모든 API가 기본적으로 비활성화되어 있습니다.
+Terraform 실행 전에 필요한 API를 **반드시** 활성화해야 합니다!
+
+**명령어 한 번에 활성화**:
 ```bash
-# .terraform 디렉토리 삭제 후 재초기화
-rm -rf .terraform
+# 필요한 모든 API 활성화
+gcloud services enable \
+  compute.googleapis.com \
+  artifactregistry.googleapis.com \
+  run.googleapis.com \
+  secretmanager.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  iam.googleapis.com
+
+# API 활성화 완료 대기 (약 1-2분)
+echo "⏳ API 활성화 중... 잠시 대기해주세요 (1-2분)"
+sleep 120
+
+# 활성화 확인
+gcloud services list --enabled | grep -E "compute|artifact|run|secret"
+```
+
+**출력 예시**:
+```
+compute.googleapis.com              Compute Engine API
+artifactregistry.googleapis.com     Artifact Registry API
+run.googleapis.com                  Cloud Run Admin API
+secretmanager.googleapis.com        Secret Manager API
+cloudresourcemanager.googleapis.com Cloud Resource Manager API
+iam.googleapis.com                  Identity and Access Management (IAM) API
+```
+
+**왜 필요한가?**
+- **Compute Engine API** → 기본 서비스 계정 생성 (`PROJECT_NUMBER-compute@...`)
+- **Artifact Registry API** → Docker 이미지 저장소 생성
+- **Cloud Run API** → 서비스 배포
+- **Secret Manager API** → API 키 안전 관리
+
+**⚠️ 주의**: API 활성화 없이 `terraform apply`를 실행하면 에러 발생!
+
+#### 1-2. terraform.tfvars 파일 생성
+
+**자동 생성 (권장)**:
+```bash
+cd terraform/gcp
+
+# 예시 파일 복사
+cp terraform.tfvars.example terraform.tfvars
+
+# 편집
+vi terraform.tfvars
+```
+
+**terraform.tfvars 내용 수정**:
+```hcl
+# GCP Project ID (필수! 실제 프로젝트 ID로 교체)
+project_id = "your-gcp-project-id"  # gcloud config get-value project로 확인
+
+# 리전 (서울 = asia-northeast3)
+region = "asia-northeast3"
+
+# 프로젝트 정보
+project_name = "agent-service"
+environment  = "tf"
+
+# Secret Manager 시크릿 이름 (Section 4에서 생성한 이름)
+openai_secret_name   = "openai-api-key"
+pinecone_secret_name = "pinecone-api-key"
+pinecone_index_name  = "ai-service-docs-dev"
+
+# Backend 리소스 (기본값 사용 가능)
+backend_cpu            = "2"
+backend_memory         = "2Gi"
+backend_min_instances  = 0    # 완전 서버리스
+backend_max_instances  = 10
+
+# Frontend 리소스
+frontend_cpu           = "1"
+frontend_memory        = "512Mi"
+frontend_min_instances = 0
+frontend_max_instances = 5
+```
+
+#### 1-3. Secret 존재 확인
+
+Section 4에서 생성한 Secret이 있는지 확인:
+
+```bash
+# Secret 목록 확인
+gcloud secrets list
+
+# 출력 예시:
+# NAME                CREATE_TIME          REPLICATION_POLICY  LOCATIONS
+# openai-api-key      2024-03-01T...       automatic           -
+# pinecone-api-key    2024-03-01T...       automatic           -
+```
+
+**Secret이 없다면 생성**:
+```bash
+# OpenAI API Key
+echo -n "your-openai-api-key" | gcloud secrets create openai-api-key --data-file=-
+
+# Pinecone API Key
+echo -n "your-pinecone-api-key" | gcloud secrets create pinecone-api-key --data-file=-
+```
+
+---
+
+### Step 2: Terraform 실행
+
+#### 2-1. 초기화 (Provider 다운로드)
+
+```bash
+cd terraform/gcp
 terraform init
 ```
 
-### 변수 누락 에러
+**출력 예시**:
 ```
-Error: No value for required variable
-```
-**해결**:
-```bash
-# terraform.tfvars 파일 확인
-cat terraform.tfvars
-
-# 또는 명령줄에서 직접 전달
-terraform apply -var="gcp_project_id=your-project-id"
+Initializing the backend...
+Initializing provider plugins...
+- Finding hashicorp/google versions matching "~> 5.0"...
+- Installing hashicorp/google v5.75.0...
+✅ Terraform has been successfully initialized!
 ```
 
-### ECR/Artifact Registry에 이미지가 없음
-```
-Error: The specified image does not exist
-```
-**해결**:
+#### 2-2. 유효성 검사
+
 ```bash
-# 먼저 이미지를 푸시한 후 Terraform apply
-docker push $ECR_URL/backend:latest
+terraform validate
+```
+
+**출력**:
+```
+✅ Success! The configuration is valid.
+```
+
+#### 2-3. 실행 계획 확인 (Dry-Run)
+
+```bash
+terraform plan
+```
+
+**출력 예시**:
+```
+Terraform will perform the following actions:
+
+  # google_artifact_registry_repository.agent will be created
+  + resource "google_artifact_registry_repository" "agent" {
+      + repository_id = "agent-tf"
+      + location      = "asia-northeast3"
+      + format        = "DOCKER"
+      ...
+    }
+
+  # google_cloud_run_v2_service.backend will be created
+  + resource "google_cloud_run_v2_service" "backend" {
+      + name     = "backend-tf"
+      + location = "asia-northeast3"
+      ...
+    }
+
+  # ... (총 4개 리소스)
+
+Plan: 4 to add, 0 to change, 0 to destroy.
+```
+
+**확인 사항**:
+- 생성될 리소스 수: **4개** (AWS 21개 대비 훨씬 적음!)
+- `0 to change, 0 to destroy` 확인 (기존 리소스 영향 없음)
+
+#### 2-4. 인프라 생성!
+
+```bash
 terraform apply
 ```
 
-### 기존 리소스 충돌
+**출력**:
 ```
-Error: Resource already exists
-```
-**본 강의에서는 발생하지 않음** (environment 변수로 다른 이름 사용: backend-tf)
+Plan: 4 to add, 0 to change, 0 to destroy.
 
-**만약 발생한다면**:
+Do you want to perform these actions?
+  Terraform will perform the actions described above.
+  Only 'yes' will be accepted to approve.
+
+  Enter a value:
+```
+
+**`yes` 입력** → ⏱️ 약 2-3분 대기
+
+**완료 출력**:
+```
+Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+artifact_registry_url = "asia-northeast3-docker.pkg.dev/your-project/agent-tf"
+backend_image_url = "asia-northeast3-docker.pkg.dev/your-project/agent-tf/backend:latest"
+backend_url = "https://backend-tf-xxxxx-an.a.run.app"
+frontend_url = "https://frontend-tf-xxxxx-an.a.run.app"
+next_steps = <<EOT
+✅ Terraform 배포 완료!
+
+📋 다음 단계:
+... (배포 가이드)
+EOT
+```
+
+#### 2-5. 생성된 리소스 확인
+
+**Terraform 출력 확인**:
 ```bash
-# 옵션 1: 다른 이름 사용 (권장 - 본 강의 방식)
-# terraform.tfvars에서 environment 변경
-
-# 옵션 2: 기존 리소스를 Terraform State로 import (고급)
-terraform import aws_ecr_repository.backend agent-service-backend
+terraform output
+terraform output backend_url
 ```
 
-## 모범 사례
+**GCP Console 확인**:
+1. **Artifact Registry**: Console > Artifact Registry > `agent-tf` 확인
+2. **Cloud Run**: Console > Cloud Run > `backend-tf`, `frontend-tf` 확인
+3. **IAM**: Console > IAM & Admin > `secretmanager.secretAccessor` 권한 확인
 
-### 1. 점진적 IaC 도입
-- **시작**: 간단한 리소스부터 (ECR, Task Definition)
-- **확장**: 안정화 후 더 많은 리소스 추가
-- **완성**: 전체 인프라를 Terraform으로 관리
+---
 
-### 2. 변수 검증
-```hcl
-variable "environment" {
-  type = string
-  validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "Environment must be dev, staging, or prod."
-  }
-}
-```
+### Step 3: 이미지 빌드/푸시 및 배포
 
-### 3. 리소스 태깅
-```hcl
-tags = {
-  Project     = "RAG-Demo"
-  Environment = var.environment
-  ManagedBy   = "Terraform"
-  Team        = "Platform"
-}
-```
+#### 3-1. Artifact Registry 인증 설정
 
-### 4. 코드 리뷰
 ```bash
-# 포맷 자동 수정
-terraform fmt -recursive
+# 인증 설정 (서울 리전)
+gcloud auth configure-docker asia-northeast3-docker.pkg.dev
 
-# 유효성 검사
-terraform validate
-
-# Plan 결과 공유
-terraform plan -out=tfplan
+# 출력: Adding credentials for: asia-northeast3-docker.pkg.dev
 ```
 
-### 5. 문서화
+#### 3-2. docker-compose로 이미지 빌드 및 푸시
+
+**환경 변수 설정**:
+```bash
+# 프로젝트 루트로 이동
+cd ../..
+
+# GCP 프로젝트 정보 설정
+export PROJECT_ID=$(gcloud config get-value project)
+export REGION=asia-northeast3
+
+# docker-compose를 위한 이미지 URL 설정
+export BACKEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/agent-tf/backend:latest"
+export FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/agent-tf/frontend:latest"
+
+# 설정 확인
+echo "Backend Image: $BACKEND_IMAGE"
+echo "Frontend Image: $FRONTEND_IMAGE"
+```
+
+**docker-compose로 빌드 및 푸시**:
+```bash
+# Backend와 Frontend 동시 빌드
+docker-compose build
+
+# Backend와 Frontend 동시 푸시
+docker-compose push
+```
+
+**💡 작동 원리** (AWS와 동일):
+- `docker-compose.yml`은 `${BACKEND_IMAGE}`, `${FRONTEND_IMAGE}` 환경 변수 사용
+- AWS/GCP 환경에 따라 다른 레지스트리 URL 설정 가능
+
+**💡 장점**:
+- 한 번의 명령으로 모든 서비스 빌드/푸시
+- Section 2에서 배운 docker-compose 지식 재사용
+
+#### 3-3. Cloud Run 자동 재배포
+
+**Cloud Run의 특별한 기능**:
+- **이미지 푸시 시 자동 감지**
+- 새 리비전 자동 생성
+- 트래픽 자동 전환
+
+**수동 재배포 (필요 시)**:
+```bash
+# Backend 재배포
+gcloud run services update backend-dev \
+  --region asia-northeast3 \
+  --image asia-northeast3-docker.pkg.dev/agent-service-terraform/agent-dev/backend:latest
+
+# Frontend 재배포
+gcloud run services update frontend-dev \
+  --region asia-northeast3 \
+  --image asia-northeast3-docker.pkg.dev/agent-service-terraform/agent-dev/frontend:latest
+```
+
+#### 3-4. 배포 상태 확인
+
+```bash
+# Service 목록 확인
+gcloud run services list --region asia-northeast3
+```
+
+**출력 예시**:
+```
+SERVICE       REGION              URL                                        LAST DEPLOYED BY
+backend-tf    asia-northeast3     https://backend-tf-xxx-an.a.run.app        you@example.com
+frontend-tf   asia-northeast3     https://frontend-tf-xxx-an.a.run.app       you@example.com
+```
+
+#### 3-5. Cloud Run 서비스 접속
+
+```bash
+# Backend URL 확인
+terraform output backend_url
+# 출력: https://backend-tf-xxxxx-an.a.run.app
+
+# Frontend URL 확인
+terraform output frontend_url
+# 출력: https://frontend-tf-xxxxx-an.a.run.app
+
+# 브라우저 접속
+open $(terraform output -raw frontend_url)
+```
+
+**확인 사항**:
+- ✅ Frontend 페이지 로드 (HTTPS 자동 제공!)
+- ✅ `/api/health` 엔드포인트 응답: `{"status": "healthy"}`
+- ✅ 인증서 유효성 (Let's Encrypt 자동 발급)
+
+#### 3-6. 로그 확인
+
+```bash
+# Backend 로그 (최근 50줄)
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=backend-tf" \
+  --limit 50 \
+  --format json
+
+# Frontend 로그
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=frontend-tf" \
+  --limit 50 \
+  --format json
+```
+
+---
+
+## 📊 Terraform 주요 명령어 (GCP)
+
+### 기본 워크플로우
+```bash
+terraform init      # Provider 다운로드 (최초 1회)
+terraform validate  # 문법 검사
+terraform plan      # 실행 계획 확인
+terraform apply     # 변경 적용
+terraform destroy   # 모든 리소스 삭제
+```
+
+### 유용한 명령어
+```bash
+# 출력 값 확인
+terraform output
+terraform output backend_url
+
+# State 목록 보기
+terraform state list
+
+# 특정 리소스 상태 보기
+terraform state show google_cloud_run_v2_service.backend
+```
+
+## 💰 GCP 비용 관리
+
+### Terraform으로 생성한 리소스 비용 (서울 리전)
+
+| 리소스 | 비용 | 설명 |
+|--------|------|------|
+| Artifact Registry | $0.10/GB/월 | 이미지 스토리지 (AWS ECR과 동일) |
+| Cloud Run (Backend) | ~$8/월 | 2 vCPU × 2GB, min_instances=0 |
+| Cloud Run (Frontend) | ~$2/월 | 1 vCPU × 512MB, min_instances=0 |
+| Cloud Logging | ~$1/월 | 로그 저장 (기본 보관 기간) |
+| **Total (상시 운영)** | **~$11/월** | |
+| **Total (요청 없을 때)** | **~$0/월** | 완전 서버리스! |
+
+**AWS 대비 비용 절감**: ~$72/월 → ~$11/월 = **85% 절감!**
+
+### 비용 절감 팁
+
+**1. 완전 서버리스 모드 (권장)**:
 ```hcl
-# 변수에 설명 추가
-variable "backend_cpu" {
-  description = "Backend task CPU units. 512 = 0.5 vCPU, 1024 = 1 vCPU."
-  type        = string
-  default     = "512"
-}
+# terraform.tfvars
+backend_min_instances  = 0  # 요청 없으면 0원!
+frontend_min_instances = 0
+```
+→ 개발 환경에서 사용하지 않을 때 **완전히 0원**
+
+**2. 개발 환경은 사용 시에만 생성**:
+```bash
+# 작업 시작
+cd terraform/gcp
+terraform apply
+
+# 작업 종료
+terraform destroy  # ← 비용 0원!
 ```
 
-## Terraform vs 수동 배포 비교
+**3. Max Instances 제한**:
+```hcl
+backend_max_instances  = 5   # 10 → 5로 제한
+frontend_max_instances = 3
+```
 
-| 항목 | 수동 배포 (Section 3-4) | Terraform (Section 5) |
-|------|-------------------------|------------------------|
-| 재현성 | ❌ 매번 다를 수 있음 | ✅ 100% 재현 가능 |
-| 협업 | ❌ 문서화 어려움 | ✅ 코드로 공유 |
-| 롤백 | ❌ 수동으로 되돌리기 | ✅ 이전 버전 적용 |
-| 변경 추적 | ❌ 어려움 | ✅ Git으로 추적 |
-| 리소스 정리 | ❌ 수동으로 하나씩 | ✅ `terraform destroy` |
-| 테스트 | ❌ 프로덕션에서만 | ✅ 격리된 환경 생성 |
-| 속도 | ⚠️ 느림 (많은 클릭) | ✅ 빠름 (자동화) |
-| 학습 곡선 | ✅ 쉬움 | ⚠️ 중간 |
+**4. 리소스 최적화**:
+```hcl
+# 리소스를 줄여서 비용 절감
+backend_cpu    = "1"     # 2 → 1 (50% 절감)
+backend_memory = "1Gi"   # 2Gi → 1Gi
+```
 
-## 실무 적용 전략
+### AWS vs GCP 비용 비교
 
-### 1단계: 간단한 리소스부터 시작
-- ✅ ECR, Artifact Registry
-- ✅ Task Definition, Cloud Run Service
+| 항목 | AWS (24/7 운영) | GCP (min=0) | 절감율 |
+|------|----------------|-------------|--------|
+| **개발 환경 (사용 중)** | $72/월 | $11/월 | 85% |
+| **개발 환경 (미사용)** | $72/월 | $0/월 | 100% |
+| **개발 환경 (8시간/일)** | $72/월 | $3/월 | 96% |
 
-### 2단계: 애플리케이션 설정 추가
-- ✅ 환경 변수 관리
-- ✅ Secret 참조
-- ✅ Auto Scaling 설정
+**GCP의 압도적 비용 우위!**
 
-### 3단계: 네트워크 인프라 추가 (선택)
-- ⚠️ VPC, Subnet (필요한 경우에만)
-- ⚠️ Load Balancer
-- ⚠️ Security Groups
+## 🛠️ 트러블슈팅 (GCP)
 
-### 4단계: 고급 기능
-- 📊 모니터링 (CloudWatch, Cloud Monitoring)
-- 🔔 알림 (SNS, Cloud Pub/Sub)
-- 🔐 보안 감사 (AWS Config, Cloud Security)
+### 0. 브라우저 인증 실패
+**증상**:
+```
+ERROR: There was a problem with web authentication. Try running again with --no-browser.
+ERROR: (gcloud.auth.application-default.login) https://www.googleapis.com/auth/cloud-platform scope is required but not consented.
+```
 
-## 다음 단계
+**원인**:
+- 브라우저가 제대로 열리지 않음
+- localhost 리다이렉트 실패
+- 권한 동의 누락 (cloud-platform scope)
+- 방화벽/네트워크 차단
 
-Section 5를 완료했다면:
-- ✅ Terraform으로 간단한 리소스를 코드로 관리하는 방법 습득
-- ✅ 기존 인프라를 재사용하면서 점진적으로 IaC 도입
-- ✅ State 관리 및 협업 전략 이해
-- ✅ 실무에서 적용 가능한 실용적 접근법 학습
+**해결**:
+```bash
+# --no-browser 옵션 사용 (권장)
+gcloud auth application-default login --no-browser
+```
 
-**Section 6 예고**: GitHub Actions를 이용한 CI/CD 파이프라인
-- 코드 푸시 → 자동 테스트 → 자동 빌드 → 자동 배포
-- Terraform과 CI/CD 통합
-- 안전한 배포 전략
+**실행 과정**:
+1. 터미널에 출력된 **인증 URL을 복사**
+2. 브라우저에서 **URL을 직접 열기**
+3. Google 계정으로 **로그인**
+4. **모든 권한 요청에 "허용" 클릭** (중요! cloud-platform 포함)
+5. 표시된 **인증 코드를 복사**
+6. 터미널로 돌아와서 **인증 코드 붙여넣기**
+
+**인증 성공 확인**:
+```bash
+gcloud auth application-default print-access-token
+# 토큰이 출력되면 성공!
+```
+
+---
+
+### 1. Project ID를 찾을 수 없음
+**증상**: `Error: google: could not find default credentials`
+
+**해결**:
+```bash
+# 1. gcloud 인증
+gcloud auth login
+gcloud auth application-default login
+
+# 2. 프로젝트 설정
+gcloud config set project YOUR_PROJECT_ID
+
+# 3. terraform.tfvars에 정확한 프로젝트 ID 입력
+project_id = "your-project-id"  # 프로젝트 이름이 아님!
+```
+
+### 2. Secret을 찾을 수 없음
+**증상**: `Error: Secret not found: openai-api-key`
+
+**원인**: Secret이 생성되지 않았거나 이름이 틀림
+
+**해결**:
+```bash
+# 1. Secret 목록 확인
+gcloud secrets list
+
+# 2. Secret이 없다면 생성
+echo -n "your-api-key" | gcloud secrets create openai-api-key --data-file=-
+
+# 3. terraform.tfvars에 정확한 이름 입력
+openai_secret_name = "openai-api-key"
+```
+
+### 3. API가 활성화되지 않음
+**증상**:
+```
+Error: Error 403: Artifact Registry API has not been used in project before or it is disabled.
+Error: Service account XXX-compute@developer.gserviceaccount.com does not exist.
+```
+
+**원인**: GCP 프로젝트에서 필요한 API들이 활성화되지 않음 (신규 프로젝트의 경우 흔함)
+
+**해결**: **Step 1-1-1. 필수 API 활성화** 참조
+
+```bash
+# 필요한 모든 API 한 번에 활성화
+gcloud services enable \
+  compute.googleapis.com \
+  artifactregistry.googleapis.com \
+  run.googleapis.com \
+  secretmanager.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  iam.googleapis.com
+
+# 활성화 완료 대기 (1-2분)
+sleep 120
+
+# 확인
+gcloud services list --enabled | grep -E "compute|artifact|run|secret"
+```
+
+**⚠️ 중요**: 특히 **Compute Engine API**를 활성화해야 기본 서비스 계정이 자동 생성됩니다!
+
+### 4. Artifact Registry 인증 실패
+**증상**: `Error: denied: Permission "artifactregistry.repositories.uploadArtifacts" denied`
+
+**해결**:
+```bash
+# 1. 인증 재설정
+gcloud auth configure-docker asia-northeast3-docker.pkg.dev
+
+# 2. 권한 확인
+gcloud projects get-iam-policy $(gcloud config get-value project)
+
+# 3. 필요 시 권한 추가
+gcloud projects add-iam-policy-binding $(gcloud config get-value project) \
+  --member="user:your-email@example.com" \
+  --role="roles/artifactregistry.writer"
+```
+
+### 5. Cloud Run 배포 실패
+**증상**: `Error: Error creating Service: googleapi: Error 400: Container image not found`
+
+**원인**: Artifact Registry에 이미지가 없음
+
+**해결**:
+```bash
+# 1. 이미지 푸시 (Step 3-2)
+docker-compose push
+
+# 2. 이미지 확인
+gcloud artifacts docker images list asia-northeast3-docker.pkg.dev/PROJECT_ID/agent-tf
+
+# 3. Terraform 재실행
+terraform apply
+```
+
+### 6. 비용 청구 계정 미설정
+**증상**: `Error: Cannot create ... Cloud Run without an active billing account`
+
+**해결**:
+1. GCP Console > Billing 이동
+2. Billing Account 생성 또는 연결
+3. 프로젝트에 Billing Account 연결
+
+## 🧹 리소스 정리
+
+### 전체 삭제
+```bash
+cd terraform/gcp
+terraform destroy
+```
+
+**출력**:
+```
+Plan: 0 to add, 0 to change, 4 to destroy.
+
+Do you really want to destroy all resources?
+  Enter a value: yes
+```
+
+**⏱️ 약 2-3분 소요** (AWS 5-10분 대비 빠름!)
+
+### 삭제 확인
+```bash
+# State에 리소스가 없는지 확인
+terraform state list
+# 출력: (비어 있음)
+
+# GCP Console에서도 확인
+gcloud run services list
+gcloud artifacts repositories list
+```
 
 ## 완료 체크리스트
+
+### 사전 준비
 - [ ] Terraform이 설치되었는가?
-- [ ] 기존 AWS 리소스를 확인하고 변수 파일에 입력했는가?
-- [ ] AWS 인프라가 Terraform으로 관리되는가?
-- [ ] GCP 인프라가 Terraform으로 관리되는가?
-- [ ] Terraform State 파일의 중요성을 이해했는가?
-- [ ] 환경별 변수 관리 전략을 적용했는가?
-- [ ] `terraform plan`과 `terraform apply`의 차이를 이해했는가?
-- [ ] 비용 관리 전략을 수립했는가?
-- [ ] 인프라 변경 사항을 Git으로 추적하고 있는가?
-- [ ] `terraform destroy`로 리소스를 정리할 수 있는가?
-- [ ] 점진적 IaC 도입 전략을 이해했는가?
+- [ ] AWS CLI가 설정되었는가?
+- [ ] VPC 정보가 확인되었는가? (`bash aws/scripts/get_vpc_info.sh`)
+- [ ] terraform.tfvars 파일에 Secret 이름이 올바른가? (기본값: dev/openai-api-key, dev/pinecone-api-key)
+
+### Terraform 실행
+- [ ] `terraform init` 성공했는가?
+- [ ] `terraform validate` 통과했는가?
+- [ ] `terraform plan`에서 19개 리소스 생성 확인했는가?
+- [ ] `terraform apply` 성공했는가?
+- [ ] 출력값 (alb_dns_name, ecr_url 등)이 표시되는가?
+
+### 배포 확인
+- [ ] ECR에 이미지가 푸시되었는가?
+- [ ] ECS Service가 ACTIVE 상태인가?
+- [ ] Running Count = Desired Count인가?
+- [ ] ALB URL로 접속이 가능한가?
+- [ ] `/api/health` 엔드포인트가 응답하는가?
+- [ ] CloudWatch Logs에 로그가 기록되는가?
+
+### 이해도 확인
+- [ ] Terraform의 기본 워크플로우를 이해했는가?
+- [ ] Resource, Variable, Output의 개념을 이해했는가?
+- [ ] State 파일의 중요성을 이해했는가?
+- [ ] terraform plan과 terraform apply의 차이를 이해했는가?
+- [ ] Section 3 수동 배포와 Terraform의 장단점을 이해했는가?
+
+---
+
+## 🎓 다음 단계
+
+Section 5를 완료했다면:
+- ✅ Terraform 기초 개념 습득
+- ✅ IaC의 실용성 체험
+- ✅ 코드로 인프라를 관리하는 실무 패턴 이해
+
+**Section 6 예고**: GitHub Actions를 이용한 CI/CD 파이프라인
+- 코드 푸시 → 자동 테스트 → 자동 빌드 → Terraform 자동 배포
+- GitOps 워크플로우
+- 안전한 배포 전략 (Blue-Green, Canary)

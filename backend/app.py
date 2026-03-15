@@ -61,9 +61,8 @@ app.add_middleware(
         "http://127.0.0.1:5500",  # Live Server
         "http://localhost:5500",
         "http://localhost:1235",
-        "http://frontend-alb-28645457.ap-northeast-2.elb.amazonaws.com",
-        "https://frontend-alb-28645457.ap-northeast-2.elb.amazonaws.com",
-        "https://frontend-dev-775177600344.asia-northeast3.run.app"
+        "http://frontend-alb-dev-946720792.ap-northeast-2.elb.amazonaws.com",
+        "https://frontend-dev-uyjzr6w3za-du.a.run.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

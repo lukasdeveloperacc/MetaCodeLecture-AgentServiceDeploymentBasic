@@ -1,7 +1,10 @@
 services:
   backend:
     platform: linux/amd64
-    image: asia-northeast3-docker.pkg.dev/agent-service-prj/agent/backend:v1
+    # 환경 변수로 이미지 URL 동적 설정
+    # AWS: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/backend-tf:latest
+    # GCP: ${REGION}-docker.pkg.dev/${PROJECT_ID}/agent-tf/backend:latest
+    image: ${BACKEND_IMAGE:-backend:latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -22,7 +25,10 @@ services:
 
   frontend:
     platform: linux/amd64
-    image: asia-northeast3-docker.pkg.dev/agent-service-prj/agent/frontend:v1
+    # 환경 변수로 이미지 URL 동적 설정
+    # AWS: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/frontend-tf:latest
+    # GCP: ${REGION}-docker.pkg.dev/${PROJECT_ID}/agent-tf/frontend:latest
+    image: ${FRONTEND_IMAGE:-frontend:latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
