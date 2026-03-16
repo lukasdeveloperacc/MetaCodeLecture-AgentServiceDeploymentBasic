@@ -89,8 +89,8 @@ jobs:
           echo "Backend: $BACKEND_IMAGE"
           echo "Frontend: $FRONTEND_IMAGE"
 
-          docker-compose build
-          docker-compose push
+          docker compose build
+          docker compose push
 
           echo "✅ Images pushed to ECR"
 

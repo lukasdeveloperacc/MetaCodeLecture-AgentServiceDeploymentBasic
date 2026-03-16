@@ -11,6 +11,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for WIF (Workload Identity Federation)
     # GitHub Environments: develop → development, staging → staging, main → production
     environment: ${{ github.ref_name == 'main' && 'production' || (github.ref_name == 'staging' && 'staging' || 'development') }}
 
@@ -89,8 +92,8 @@ jobs:
           echo "Backend: $BACKEND_IMAGE"
           echo "Frontend: $FRONTEND_IMAGE"
 
-          docker-compose build
-          docker-compose push
+          docker compose build
+          docker compose push
 
           echo "✅ Images pushed to Artifact Registry"
 
