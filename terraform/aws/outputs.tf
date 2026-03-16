@@ -135,8 +135,8 @@ output "next_steps" {
        # 환경 변수 설정
        export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
        export AWS_REGION=${var.aws_region}
-       export BACKEND_IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend-${var.environment}:latest"
-       export FRONTEND_IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend-${var.environment}:latest"
+       export BACKEND_IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/backend-${var.environment}:${var.image_tag}"
+       export FRONTEND_IMAGE="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/frontend-${var.environment}:${var.image_tag}"
 
        # docker-compose로 빌드 및 푸시 (두 서비스 동시)
        docker-compose build

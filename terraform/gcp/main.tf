@@ -24,6 +24,15 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # 원격 State 관리 (팀 협업용)
+  # GitHub Actions에서 -backend-config로 동적 설정
+  backend "gcs" {
+    # bucket, prefix는 terraform init 시 주입됨
+    # 예: terraform init \
+    #   -backend-config="bucket=my-state-bucket" \
+    #   -backend-config="prefix=agent-service/dev"
+  }
 }
 
 # ------------------------------------------------------------------------------

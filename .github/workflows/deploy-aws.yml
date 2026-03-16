@@ -1,0 +1,130 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # GitHub Environments: develop → development, staging → staging, main → production
+    environment: ${{ github.ref_name == 'main' && 'production' || (github.ref_name == 'staging' && 'staging' || 'development') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Get AWS Account ID
+        id: account
+        run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
+      # ========================================================================
+      # Step 1: Create ECR Registry
+      # ========================================================================
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Generate terraform.tfvars
+        working-directory: terraform/aws
+        run: |
+          cat > terraform.tfvars <<EOF
+          environment = "${{ vars.ENVIRONMENT }}"
+          image_tag = "${{ vars.IMAGE_TAG }}"
+          vpc_id = "${{ secrets.AWS_VPC_ID }}"
+          public_subnet_ids = ${{ secrets.AWS_PUBLIC_SUBNET_IDS }}
+          openai_secret_name = "${{ vars.AWS_OPENAI_SECRET_NAME }}"
+          pinecone_secret_name = "${{ vars.AWS_PINECONE_SECRET_NAME }}"
+          backend_cpu = "${{ vars.BACKEND_CPU }}"
+          backend_memory = "${{ vars.BACKEND_MEMORY }}"
+          backend_desired_count = ${{ vars.BACKEND_DESIRED_COUNT }}
+          frontend_cpu = "${{ vars.FRONTEND_CPU }}"
+          frontend_memory = "${{ vars.FRONTEND_MEMORY }}"
+          frontend_desired_count = ${{ vars.FRONTEND_DESIRED_COUNT }}
+          EOF
+
+      - name: Terraform Init
+        working-directory: terraform/aws
+        run: |
+          terraform init \
+            -backend-config="bucket=metacode-terraform-state" \
+            -backend-config="key=agent-service/${{ vars.ENVIRONMENT }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}"
+
+      - name: Create ECR Repositories
+        working-directory: terraform/aws
+        run: |
+          terraform apply -auto-approve \
+            -target=aws_ecr_repository.backend \
+            -target=aws_ecr_repository.frontend
+
+          echo "✅ ECR Repository 생성 완료: backend-${{ vars.ENVIRONMENT }}, frontend-${{ vars.ENVIRONMENT }}"
+
+      # ========================================================================
+      # Step 2: Build and Push Docker Images
+      # ========================================================================
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images
+        env:
+          BACKEND_IMAGE: ${{ steps.account.outputs.id }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/backend-${{ vars.ENVIRONMENT }}:${{ vars.IMAGE_TAG }}
+          FRONTEND_IMAGE: ${{ steps.account.outputs.id }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/frontend-${{ vars.ENVIRONMENT }}:${{ vars.IMAGE_TAG }}
+        run: |
+          echo "🐳 Building images for ${{ vars.ENVIRONMENT }} environment"
+          echo "Backend: $BACKEND_IMAGE"
+          echo "Frontend: $FRONTEND_IMAGE"
+
+          docker-compose build
+          docker-compose push
+
+          echo "✅ Images pushed to ECR"
+
+      # ========================================================================
+      # Step 3: Deploy Infrastructure with Terraform
+      # ========================================================================
+
+      - name: Deploy with Terraform
+        working-directory: terraform/aws
+        run: |
+          echo "🚀 Deploying infrastructure for ${{ vars.ENVIRONMENT }} environment"
+
+          terraform apply -auto-approve
+
+          echo "✅ Terraform apply 완료"
+
+      - name: Deployment summary
+        run: |
+          echo "## 🎉 AWS 배포 완료" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ vars.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ vars.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image Tag:** ${{ vars.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Resources Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Cluster: agent-cluster-${{ vars.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend Service: backend-${{ vars.ENVIRONMENT }}-service" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend Service: frontend-${{ vars.ENVIRONMENT }}-service" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend Image: backend-${{ vars.ENVIRONMENT }}:${{ vars.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend Image: frontend-${{ vars.ENVIRONMENT }}:${{ vars.IMAGE_TAG }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 배포 결과 확인" >> $GITHUB_STEP_SUMMARY
+          echo "Terraform outputs로 배포된 리소스 정보를 확인하세요:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "cd terraform/aws" >> $GITHUB_STEP_SUMMARY
+          echo "terraform output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

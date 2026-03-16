@@ -1,64 +1,75 @@
 # ==============================================================================
-# Terraform Variables 예시 파일 (GCP)
+# Terraform Variables 템플릿 파일 (GCP)
 # ==============================================================================
 #
 # 🎯 사용 방법:
-# 1. 이 파일을 복사하여 terraform.tfvars 생성:
+#
+# 1. GitHub Actions에서 자동 생성 (권장):
+#    GitHub Environments에서 Variables와 Secrets 설정
+#    → Workflow에서 자동으로 terraform.tfvars 생성
+#
+# 2. 로컬 테스트 시:
 #    cp terraform.tfvars.example terraform.tfvars
+#    vi terraform.tfvars  # 실제 값으로 교체
 #
-# 2. 실제 값으로 교체 (특히 project_id)
-#
-# 3. terraform apply 실행
-#
-# ⚠️  주의: terraform.tfvars는 .gitignore에 포함되어 있습니다 (민감 정보 보호)
+# ⚠️  terraform.tfvars는 .gitignore에 포함되어 있어 Git에 커밋되지 않습니다.
 
 # ------------------------------------------------------------------------------
-# GCP 프로젝트 정보
+# GCP 프로젝트 및 리전
 # ------------------------------------------------------------------------------
 #
 # 🔍 Project ID 확인 방법:
 #   gcloud config get-value project
 #
-# 또는 GCP Console에서:
+# 또는 GCP Console:
 #   https://console.cloud.google.com → 프로젝트 선택 → 프로젝트 ID 복사
+#
+# GitHub Variables에 저장:
+#   GCP_PROJECT_ID: my-gcp-project-123456
+#   GCP_REGION: asia-northeast3
 
-project_id = "your-gcp-project-id"  # 실제 GCP 프로젝트 ID로 교체
+project_id = "${GCP_PROJECT_ID}"
+region = "${GCP_REGION}"
+
+# 예시 (로컬 테스트 시):
+# project_id = "my-gcp-project-123456"
+# region = "asia-northeast3"
+
+# 다른 리전 옵션:
+# asia-northeast1 (도쿄)
+# us-central1 (아이오와)
+# europe-west1 (벨기에)
 
 # ------------------------------------------------------------------------------
-# 리전 설정
+# 환경 설정
 # ------------------------------------------------------------------------------
 
-region = "asia-northeast3"  # 서울 리전 (기본값)
-
-# 다른 리전 사용 시:
-# region = "asia-northeast1"  # 도쿄
-# region = "us-central1"      # 아이오와
-# region = "europe-west1"     # 벨기에
-
-# ------------------------------------------------------------------------------
-# 프로젝트 및 환경 정보
-# ------------------------------------------------------------------------------
-
-project_name = "agent-service"
-environment  = "tf"  # 리소스 이름: backend-tf, frontend-tf, agent-tf
+environment = "${ENVIRONMENT}"
+# GitHub Environments: development, staging, production
+# 리소스 이름: backend-${ENVIRONMENT}, frontend-${ENVIRONMENT}, agent-${ENVIRONMENT}
 
 # ------------------------------------------------------------------------------
 # Secret Manager 시크릿 이름
 # ------------------------------------------------------------------------------
 #
-# 🔍 Secret 이름 확인 방법:
+# 🔍 Secret 이름 확인:
 #   gcloud secrets list
 #
 # ⚠️  Section 4에서 생성한 Secrets을 사용합니다.
-#     아직 생성하지 않았다면 Section 4 문서를 참고하여 먼저 생성하세요.
 #
-# Secret 생성 예시:
-#   echo -n "your-openai-api-key" | gcloud secrets create openai-api-key --data-file=-
-#   echo -n "your-pinecone-api-key" | gcloud secrets create pinecone-api-key --data-file=-
+# GitHub Variables에 저장:
+#   GCP_OPENAI_SECRET_NAME: openai-api-key
+#   GCP_PINECONE_SECRET_NAME: pinecone-api-key
+#   PINECONE_INDEX_NAME: ai-service-docs-dev
 
-openai_secret_name   = "openai-api-key"
-pinecone_secret_name = "pinecone-api-key"
-pinecone_index_name  = "ai-service-docs-dev"
+openai_secret_name = "${GCP_OPENAI_SECRET_NAME}"
+pinecone_secret_name = "${GCP_PINECONE_SECRET_NAME}"
+pinecone_index_name = "${PINECONE_INDEX_NAME}"
+
+# 예시 (로컬 테스트 시):
+# openai_secret_name = "openai-api-key"
+# pinecone_secret_name = "pinecone-api-key"
+# pinecone_index_name = "ai-service-docs-dev"
 
 # ------------------------------------------------------------------------------
 # Backend 리소스 설정
@@ -69,70 +80,41 @@ pinecone_index_name  = "ai-service-docs-dev"
 #   2 CPU:  최대 4Gi
 #   4 CPU:  최대 8Gi
 #   8 CPU:  최대 16Gi
+#
+# GitHub Variables에 저장:
+#   BACKEND_CPU: "2"
+#   BACKEND_MEMORY: "2Gi"
+#   BACKEND_MIN_INSTANCES: 0
+#   BACKEND_MAX_INSTANCES: 10
 
-backend_cpu    = "2"     # 2 vCPU
-backend_memory = "2Gi"   # 2 GB
+backend_cpu = "${BACKEND_CPU}"
+backend_memory = "${BACKEND_MEMORY}"
+backend_min_instances = ${BACKEND_MIN_INSTANCES}
+backend_max_instances = ${BACKEND_MAX_INSTANCES}
+
+# 예시 (로컬 테스트 시):
+# backend_cpu = "2"
+# backend_memory = "2Gi"
+# backend_min_instances = 0
+# backend_max_instances = 10
 
 # ------------------------------------------------------------------------------
 # Frontend 리소스 설정
 # ------------------------------------------------------------------------------
-
-frontend_cpu    = "1"      # 1 vCPU
-frontend_memory = "512Mi"  # 512 MB
-
-# ------------------------------------------------------------------------------
-# 스케일링 설정
-# ------------------------------------------------------------------------------
 #
-# 💡 Min Instances:
-#   - 0: 요청 없을 때 완전히 축소 (비용 절감)
-#   - 1+: 항상 실행 유지 (빠른 응답, 콜드 스타트 방지)
-#
-# 💡 Max Instances:
-#   - 개발 환경: 5-10 (비용 절감)
-#   - 프로덕션: 10-100 (트래픽 대응)
+# GitHub Variables에 저장:
+#   FRONTEND_CPU: "1"
+#   FRONTEND_MEMORY: "512Mi"
+#   FRONTEND_MIN_INSTANCES: 0
+#   FRONTEND_MAX_INSTANCES: 5
 
-# Backend 스케일링
-backend_min_instances = 0   # 자동 축소 (비용 절감)
-backend_max_instances = 10  # 최대 10개 인스턴스
+frontend_cpu = "${FRONTEND_CPU}"
+frontend_memory = "${FRONTEND_MEMORY}"
+frontend_min_instances = ${FRONTEND_MIN_INSTANCES}
+frontend_max_instances = ${FRONTEND_MAX_INSTANCES}
 
-# Frontend 스케일링
-frontend_min_instances = 0
-frontend_max_instances = 5
-
-# ------------------------------------------------------------------------------
-# 선택적 설정 (고급)
-# ------------------------------------------------------------------------------
-
-# 커스텀 도메인 연결 시:
-# custom_domain = "api.example.com"
-
-# VPC Connector 사용 시 (VPC 내부 리소스 접근):
-# vpc_connector = "projects/PROJECT_ID/locations/REGION/connectors/CONNECTOR_NAME"
-
-# 환경별 설정 예시:
-# environment = "dev"    # 개발 환경
-# environment = "staging" # 스테이징 환경
-# environment = "prod"   # 프로덕션 환경
-
-# ------------------------------------------------------------------------------
-# AWS vs GCP 설정 비교
-# ------------------------------------------------------------------------------
-#
-# AWS terraform.tfvars (복잡):
-#   - vpc_id 필요 (VPC 정보 필수)
-#   - public_subnet_ids 필요 (최소 2개)
-#   - secret ARN 필요 (긴 ARN 문자열)
-#   - desired_count (고정된 Task 수)
-#   → 총 10개 이상의 변수 설정 필요
-#
-# GCP terraform.tfvars (간단):
-#   - project_id만 필수
-#   - secret 이름만 필요 (ARN 불필요)
-#   - min/max instances (자동 스케일링)
-#   → 총 4개 변수만 설정하면 시작 가능!
-#
-# 왜 GCP가 더 간단한가?
-#   - Cloud Run이 완전 관리형 서비스
-#   - VPC, Subnet, Security Group 등 인프라 관리 불필요
-#   - 기본값이 잘 설정되어 있어 최소 설정만으로 동작
+# 예시 (로컬 테스트 시):
+# frontend_cpu = "1"
+# frontend_memory = "512Mi"
+# frontend_min_instances = 0
+# frontend_max_instances = 5

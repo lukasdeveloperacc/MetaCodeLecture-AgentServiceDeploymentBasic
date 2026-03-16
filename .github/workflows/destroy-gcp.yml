@@ -1,0 +1,77 @@
+name: Destroy GCP Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'dev' && 'development' || 'staging' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Generate terraform.tfvars
+        working-directory: terraform/gcp
+        run: |
+          cat > terraform.tfvars <<EOF
+          project_id = "${{ vars.GCP_PROJECT_ID }}"
+          region = "${{ vars.GCP_REGION }}"
+          environment = "${{ vars.ENVIRONMENT }}"
+          image_tag = "${{ vars.IMAGE_TAG }}"
+          openai_secret_name = "${{ vars.GCP_OPENAI_SECRET_NAME }}"
+          pinecone_secret_name = "${{ vars.GCP_PINECONE_SECRET_NAME }}"
+          pinecone_index_name = "${{ vars.PINECONE_INDEX_NAME }}"
+          backend_cpu = "${{ vars.BACKEND_CPU }}"
+          backend_memory = "${{ vars.BACKEND_MEMORY }}"
+          backend_min_instances = ${{ vars.BACKEND_MIN_INSTANCES }}
+          backend_max_instances = ${{ vars.BACKEND_MAX_INSTANCES }}
+          frontend_cpu = "${{ vars.FRONTEND_CPU }}"
+          frontend_memory = "${{ vars.FRONTEND_MEMORY }}"
+          frontend_min_instances = ${{ vars.FRONTEND_MIN_INSTANCES }}
+          frontend_max_instances = ${{ vars.FRONTEND_MAX_INSTANCES }}
+          EOF
+
+      - name: Terraform Init
+        working-directory: terraform/gcp
+        run: |
+          terraform init \
+            -backend-config="bucket=metacode-terraform-state" \
+            -backend-config="prefix=agent-service/${{ vars.ENVIRONMENT }}"
+
+      - name: Destroy Infrastructure
+        working-directory: terraform/gcp
+        run: |
+          echo "🗑️ Destroying all infrastructure for ${{ vars.ENVIRONMENT }}"
+          terraform destroy -auto-approve
+          echo "✅ Infrastructure destroyed"
+
+      - name: Destroy Summary
+        run: |
+          echo "## 🗑️ GCP 인프라 삭제 완료" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ vars.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Destroyed:** Cloud Run, Artifact Registry" >> $GITHUB_STEP_SUMMARY

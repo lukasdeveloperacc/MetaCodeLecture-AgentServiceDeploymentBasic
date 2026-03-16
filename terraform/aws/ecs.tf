@@ -60,7 +60,7 @@ resource "aws_ecs_task_definition" "backend" {
   # 컨테이너 정의
   container_definitions = jsonencode([{
     name  = "backend"
-    image = "${aws_ecr_repository.backend.repository_url}:latest"
+    image = "${aws_ecr_repository.backend.repository_url}:${var.image_tag}"
 
     # 포트 매핑
     portMappings = [{
@@ -129,7 +129,7 @@ resource "aws_ecs_task_definition" "frontend" {
 
   container_definitions = jsonencode([{
     name  = "frontend"
-    image = "${aws_ecr_repository.frontend.repository_url}:latest"
+    image = "${aws_ecr_repository.frontend.repository_url}:${var.image_tag}"
 
     portMappings = [{
       containerPort = 80

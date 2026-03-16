@@ -39,7 +39,7 @@ resource "google_cloud_run_v2_service" "backend" {
       # 컨테이너 이미지
       # 초기 배포 시에는 이미지가 없어도 됩니다 (placeholder 사용)
       # 실제 이미지는 terraform apply 후 docker push로 업로드
-      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/backend:latest"
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/backend:${var.image_tag}"
 
       # 포트 설정
       ports {
@@ -169,7 +169,7 @@ resource "google_cloud_run_v2_service" "frontend" {
 
     containers {
       # Frontend 이미지
-      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/frontend:latest"
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/frontend:${var.image_tag}"
 
       # Nginx는 80 포트 사용
       ports {

@@ -23,12 +23,12 @@ output "artifact_registry_url" {
 
 output "backend_image_url" {
   description = "Backend 이미지 전체 URL"
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/backend:latest"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/backend:${var.image_tag}"
 }
 
 output "frontend_image_url" {
   description = "Frontend 이미지 전체 URL"
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/frontend:latest"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.agent.repository_id}/frontend:${var.image_tag}"
 }
 
 # ------------------------------------------------------------------------------
@@ -77,8 +77,8 @@ output "next_steps" {
        # 환경 변수 설정
        export PROJECT_ID=${var.project_id}
        export REGION=${var.region}
-       export BACKEND_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/${google_artifact_registry_repository.agent.repository_id}/backend:latest"
-       export FRONTEND_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/${google_artifact_registry_repository.agent.repository_id}/frontend:latest"
+       export BACKEND_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/${google_artifact_registry_repository.agent.repository_id}/backend:${var.image_tag}"
+       export FRONTEND_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/${google_artifact_registry_repository.agent.repository_id}/frontend:${var.image_tag}"
 
        # docker-compose로 빌드 및 푸시 (두 서비스 동시)
        docker-compose build

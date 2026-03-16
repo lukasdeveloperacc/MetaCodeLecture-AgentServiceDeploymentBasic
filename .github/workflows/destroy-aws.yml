@@ -1,0 +1,73 @@
+name: Destroy AWS Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to destroy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'dev' && 'development' || 'staging' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Generate terraform.tfvars
+        working-directory: terraform/aws
+        run: |
+          cat > terraform.tfvars <<EOF
+          environment = "${{ vars.ENVIRONMENT }}"
+          image_tag = "${{ vars.IMAGE_TAG }}"
+          vpc_id = "${{ secrets.AWS_VPC_ID }}"
+          public_subnet_ids = ${{ secrets.AWS_PUBLIC_SUBNET_IDS }}
+          openai_secret_name = "${{ vars.AWS_OPENAI_SECRET_NAME }}"
+          pinecone_secret_name = "${{ vars.AWS_PINECONE_SECRET_NAME }}"
+          backend_cpu = "${{ vars.BACKEND_CPU }}"
+          backend_memory = "${{ vars.BACKEND_MEMORY }}"
+          backend_desired_count = ${{ vars.BACKEND_DESIRED_COUNT }}
+          frontend_cpu = "${{ vars.FRONTEND_CPU }}"
+          frontend_memory = "${{ vars.FRONTEND_MEMORY }}"
+          frontend_desired_count = ${{ vars.FRONTEND_DESIRED_COUNT }}
+          EOF
+
+      - name: Terraform Init
+        working-directory: terraform/aws
+        run: |
+          terraform init \
+            -backend-config="bucket=metacode-terraform-state" \
+            -backend-config="key=agent-service/${{ vars.ENVIRONMENT }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}"
+
+      - name: Destroy Infrastructure
+        working-directory: terraform/aws
+        run: |
+          echo "🗑️ Destroying all infrastructure for ${{ vars.ENVIRONMENT }}"
+          terraform destroy -auto-approve
+          echo "✅ Infrastructure destroyed"
+
+      - name: Destroy Summary
+        run: |
+          echo "## 🗑️ AWS 인프라 삭제 완료" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ vars.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Destroyed:** ECS, ALB, Security Groups, ECR" >> $GITHUB_STEP_SUMMARY

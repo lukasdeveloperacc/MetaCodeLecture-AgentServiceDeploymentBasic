@@ -55,6 +55,15 @@ variable "environment" {
   }
 }
 
+variable "image_tag" {
+  description = "Docker image tag for versioning (예: v1.0.0, v1.2.3)"
+  type        = string
+  default     = "latest"
+
+  # GitHub Actions에서 vars.IMAGE_TAG로 전달
+  # 환경별로 동일한 버전 태그를 사용하여 배포 추적
+}
+
 # ------------------------------------------------------------------------------
 # Secret Manager 시크릿 이름
 # ------------------------------------------------------------------------------

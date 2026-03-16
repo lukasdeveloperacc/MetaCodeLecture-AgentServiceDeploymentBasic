@@ -15,14 +15,16 @@ terraform {
     }
   }
 
-  # 원격 State 관리 (선택사항, 팀 협업 시 사용)
-  # backend "s3" {
-  #   bucket         = "your-terraform-state-bucket"
-  #   key            = "agent-service/terraform.tfstate"
-  #   region         = "ap-northeast-2"
-  #   dynamodb_table = "terraform-locks"
-  #   encrypt        = true
-  # }
+  # 원격 State 관리 (팀 협업용)
+  # GitHub Actions에서 -backend-config로 동적 설정
+  backend "s3" {
+    # bucket, key, region은 terraform init 시 주입됨
+    # 예: terraform init \
+    #   -backend-config="bucket=my-state-bucket" \
+    #   -backend-config="key=agent-service/dev/terraform.tfstate" \
+    #   -backend-config="region=ap-northeast-2"
+    encrypt = true
+  }
 }
 
 # AWS Provider 설정
