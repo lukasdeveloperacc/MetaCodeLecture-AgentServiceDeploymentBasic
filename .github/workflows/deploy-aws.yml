@@ -80,6 +80,10 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Create dummy .env file
+        run: |
+          touch backend/.env
+
       - name: Build and push images
         env:
           BACKEND_IMAGE: ${{ steps.account.outputs.id }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/backend-${{ vars.ENVIRONMENT }}:${{ vars.IMAGE_TAG }}
