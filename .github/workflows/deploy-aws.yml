@@ -48,11 +48,11 @@ jobs:
           public_subnet_ids = ${{ secrets.AWS_PUBLIC_SUBNET_IDS }}
           openai_secret_name = "${{ vars.AWS_OPENAI_SECRET_NAME }}"
           pinecone_secret_name = "${{ vars.AWS_PINECONE_SECRET_NAME }}"
-          backend_cpu = "${{ vars.BACKEND_CPU }}"
-          backend_memory = "${{ vars.BACKEND_MEMORY }}"
+          backend_cpu = "${{ vars.AWS_BACKEND_CPU }}"
+          backend_memory = "${{ vars.AWS_BACKEND_MEMORY }}"
           backend_desired_count = ${{ vars.BACKEND_DESIRED_COUNT }}
-          frontend_cpu = "${{ vars.FRONTEND_CPU }}"
-          frontend_memory = "${{ vars.FRONTEND_MEMORY }}"
+          frontend_cpu = "${{ vars.AWS_FRONTEND_CPU }}"
+          frontend_memory = "${{ vars.AWS_FRONTEND_MEMORY }}"
           frontend_desired_count = ${{ vars.FRONTEND_DESIRED_COUNT }}
           EOF
 
