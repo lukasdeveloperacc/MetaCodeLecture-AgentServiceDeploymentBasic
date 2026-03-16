@@ -71,6 +71,8 @@ jobs:
 
       - name: Create Artifact Registry
         working-directory: terraform/gcp
+        env:
+          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
           terraform apply -auto-approve \
             -target=google_artifact_registry_repository.agent
@@ -109,6 +111,8 @@ jobs:
 
       - name: Deploy with Terraform
         working-directory: terraform/gcp
+        env:
+          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
           echo "🚀 Deploying infrastructure for ${{ vars.ENVIRONMENT }} environment"
 
