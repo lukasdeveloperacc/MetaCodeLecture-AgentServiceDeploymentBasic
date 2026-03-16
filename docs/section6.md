@@ -722,14 +722,18 @@ Settings → Environments → production → Protection rules
 | `GCP_OPENAI_SECRET_NAME` | `openai-api-key` | Secret Manager 시크릿 이름 |
 | `GCP_PINECONE_SECRET_NAME` | `pinecone-api-key` | Secret Manager 시크릿 이름 |
 | `PINECONE_INDEX_NAME` | `ai-service-docs-dev` | Pinecone Index 이름 |
-| `BACKEND_CPU` | `2` | Backend Cloud Run CPU (단위: vCPU) |
-| `BACKEND_MEMORY` | `2Gi` | Backend Cloud Run Memory |
+| `GCP_BACKEND_CPU` | `2` | Backend Cloud Run CPU (코어 수: 1, 2, 4, 8) |
+| `GCP_BACKEND_MEMORY` | `2Gi` | Backend Cloud Run Memory (Mi/Gi 접미사 필수) |
 | `BACKEND_MIN_INSTANCES` | `0` | Backend 최소 인스턴스 |
 | `BACKEND_MAX_INSTANCES` | `5` | Backend 최대 인스턴스 |
-| `FRONTEND_CPU` | `1` | Frontend Cloud Run CPU |
-| `FRONTEND_MEMORY` | `512Mi` | Frontend Cloud Run Memory |
+| `GCP_FRONTEND_CPU` | `1` | Frontend Cloud Run CPU (코어 수: 1, 2, 4, 8) |
+| `GCP_FRONTEND_MEMORY` | `512Mi` | Frontend Cloud Run Memory (Mi/Gi 접미사 필수) |
 | `FRONTEND_MIN_INSTANCES` | `0` | Frontend 최소 인스턴스 |
 | `FRONTEND_MAX_INSTANCES` | `3` | Frontend 최대 인스턴스 |
+
+**⚠️ 중요**: GCP와 AWS는 CPU/Memory 형식이 다릅니다!
+- AWS: `AWS_BACKEND_CPU="1024"` (밀리코어), `AWS_BACKEND_MEMORY="2048"` (MB)
+- GCP: `GCP_BACKEND_CPU="2"` (코어 수), `GCP_BACKEND_MEMORY="2Gi"` (Mi/Gi 접미사)
 
 #### staging 환경
 
@@ -802,6 +806,126 @@ aws ec2 describe-subnets --filters "Name=vpc-id,Values=<VPC_ID>" \
 | `AWS_SECRET_ACCESS_KEY` | `~/.aws/credentials`의 `aws_secret_access_key` | AWS 시크릿 키 |
 | `AWS_VPC_ID` | `vpc-xxxxx` | VPC ID |
 | `AWS_PUBLIC_SUBNET_IDS` | `["subnet-xxxxx", "subnet-yyyyy"]` | Subnet IDs (JSON 배열) |
+
+#### GCP 사전 준비 (필수)
+
+**⚠️ 중요**: WIF 설정 전에 다음 사항들을 먼저 확인하세요.
+
+**1. GCS Terraform State 버킷 및 권한 설정**
+
+```bash
+# 1단계: GCS 버킷 생성 (이미 생성되어 있다면 skip)
+gcloud storage buckets create gs://metacode-terraform-state \
+  --location=asia-northeast3 \
+  --project=$GCP_PROJECT_ID
+
+# 2단계: 버킷 버저닝 활성화 (State 파일 보호)
+gcloud storage buckets update gs://metacode-terraform-state \
+  --versioning
+
+# 3단계: github-actions 서비스 계정에 Storage 권한 부여
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+```
+
+**2. 서비스 계정 전체 권한 목록 (필수)**
+
+GitHub Actions에서 배포하려면 다음 **모든 권한**이 필요합니다:
+
+```bash
+export GCP_PROJECT_ID="your-gcp-project-id"
+
+# Artifact Registry 관리 (이미지 업로드)
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.admin"
+
+# Cloud Run 관리 (서비스 생성/업데이트)
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+
+# 서비스 계정 사용 권한
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+# Secret Manager 접근 (시크릿 읽기)
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# Storage 관리 (Terraform State 파일)
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+
+# ⚠️ 중요: IAM 정책 관리 (Terraform에서 IAM 바인딩 생성 시 필요)
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/resourcemanager.projectIamAdmin"
+```
+
+**왜 이렇게 많은 권한이 필요한가?**
+- `artifactregistry.admin`: Docker 이미지 업로드
+- `run.admin`: Cloud Run 서비스 생성/수정
+- `iam.serviceAccountUser`: Cloud Run이 다른 서비스 계정 사용
+- `secretmanager.secretAccessor`: Terraform이 시크릿 참조
+- `storage.admin`: Terraform State 파일 읽기/쓰기
+- `resourcemanager.projectIamAdmin`: **Terraform이 IAM 바인딩 생성** (Cloud Run → Secret Manager 접근 권한)
+
+**3. AWS vs GCP 리소스 형식 차이 (매우 중요)**
+
+| 항목 | AWS ECS | GCP Cloud Run |
+|------|---------|---------------|
+| **CPU** | 밀리코어 (256, 512, 1024, 2048, 4096) | 코어 수 (1, 2, 4, 8) |
+| **Memory** | MB 단위 (512, 1024, 2048, 4096) | Mi/Gi 접미사 (512Mi, 1Gi, 2Gi, 4Gi) |
+| **예시** | BACKEND_CPU="1024" | BACKEND_CPU="2" |
+| **예시** | BACKEND_MEMORY="2048" | BACKEND_MEMORY="2Gi" |
+
+**❌ 잘못된 설정 (GCP에서 에러 발생)**:
+```yaml
+BACKEND_CPU: "1024"        # ❌ GCP는 밀리코어 사용 안 함
+BACKEND_MEMORY: "2048"     # ❌ Mi/Gi 접미사 필요
+```
+
+**✅ 올바른 설정**:
+```yaml
+# GCP Variables (development 환경 예시)
+GCP_BACKEND_CPU: "2"        # 2 vCPU
+GCP_BACKEND_MEMORY: "2Gi"   # 2GB
+GCP_FRONTEND_CPU: "1"       # 1 vCPU
+GCP_FRONTEND_MEMORY: "512Mi" # 512MB
+```
+
+**4. Service Account Impersonation 설정**
+
+Terraform과 Docker 명령이 github-actions 서비스 계정 권한으로 실행되도록 설정:
+
+Workflow 파일에서 다음과 같이 사용:
+```yaml
+# .github/workflows/deploy-gcp.yml
+
+- name: Terraform Init
+  working-directory: terraform/gcp
+  env:
+    GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+  run: terraform init ...
+
+- name: Configure Docker for Artifact Registry
+  run: |
+    gcloud auth print-access-token \
+      --impersonate-service-account=github-actions@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com | \
+    docker login -u oauth2accesstoken --password-stdin https://${{ vars.GCP_REGION }}-docker.pkg.dev
+```
+
+**왜 Impersonation이 필요한가?**
+- WIF로 인증한 후에도 실제 작업은 `github-actions` 서비스 계정 권한으로 수행
+- Terraform backend GCS 접근, Artifact Registry 업로드 모두 이 계정 권한 사용
+- 명시적으로 impersonate해야 권한 오류 방지
+
+---
 
 #### GCP Secrets (GCP 배포 시)
 
@@ -1012,6 +1136,126 @@ gcloud iam workload-identity-pools providers describe github-provider \
   --project=PROJECT_ID --location=global --workload-identity-pool=github-pool
 
 # GitHub Environments Secrets 업데이트 필요
+```
+
+### GCP IAM Permission 오류
+
+**증상**: `Error 403: The caller does not have permission, forbidden`
+
+**원인**: github-actions 서비스 계정에 필요한 권한이 없음
+
+**해결**:
+```bash
+# 1. 현재 권한 확인
+gcloud projects get-iam-policy $GCP_PROJECT_ID \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com"
+
+# 2. 누락된 권한 추가 (위 "GCP 사전 준비" 섹션 참고)
+# 특히 중요한 권한:
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/resourcemanager.projectIamAdmin"
+
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+```
+
+### GCP CPU/Memory Validation 오류
+
+**증상 1**: `Valid CPU values: 1, 2, 4, 8`
+```
+Error: Invalid value for variable
+backend_cpu = "1024"  # ❌ AWS 형식 사용
+Valid CPU values: 1, 2, 4, 8
+```
+
+**증상 2**: `Invalid value specified for container memory. For 1.0 CPU, memory must be between 128Mi and 4Gi`
+```
+Error: Invalid value for variable
+backend_memory = "2048"  # ❌ Mi/Gi 접미사 없음
+Memory must have Mi or Gi suffix
+```
+
+**해결**:
+```yaml
+# GitHub Environments Variables 수정
+# development 환경 예시
+
+# ❌ 잘못된 값 (AWS 형식)
+GCP_BACKEND_CPU: "1024"
+GCP_BACKEND_MEMORY: "2048"
+
+# ✅ 올바른 값 (GCP 형식)
+GCP_BACKEND_CPU: "2"        # 코어 수 (1, 2, 4, 8)
+GCP_BACKEND_MEMORY: "2Gi"   # Mi/Gi 접미사 필수
+```
+
+**CPU/Memory 유효한 조합**:
+| CPU | Memory 범위 |
+|-----|-------------|
+| 1 | 128Mi - 4Gi |
+| 2 | 256Mi - 8Gi |
+| 4 | 512Mi - 16Gi |
+| 8 | 1Gi - 32Gi |
+
+### Terraform Backend Storage 접근 오류
+
+**증상**: `Error 403: Caller does not have storage.objects.list access to the Google Cloud Storage bucket`
+
+**원인**: github-actions 서비스 계정이 GCS bucket에 접근 권한 없음
+
+**해결**:
+```bash
+# Storage Admin 권한 부여
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:github-actions@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/storage.admin"
+
+# Workflow에서 Impersonation 설정 확인
+# .github/workflows/deploy-gcp.yml
+env:
+  GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@PROJECT_ID.iam.gserviceaccount.com
+```
+
+### Artifact Registry 인증 오류
+
+**증상**: `denied: Permission 'artifactregistry.repositories.uploadArtifacts' denied`
+
+**원인**: Docker가 github-actions 서비스 계정 권한으로 인증하지 못함
+
+**해결**:
+```yaml
+# Workflow 파일에서 명시적 impersonation 사용
+- name: Configure Docker for Artifact Registry
+  run: |
+    gcloud auth print-access-token \
+      --impersonate-service-account=github-actions@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com | \
+    docker login -u oauth2accesstoken --password-stdin https://${{ vars.GCP_REGION }}-docker.pkg.dev
+
+# ❌ 잘못된 방법 (WIF 권한만으로는 부족)
+- name: Configure Docker for Artifact Registry
+  run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev
+```
+
+### Docker Build .env 파일 오류
+
+**증상**: `env file .../backend/.env not found: no such file or directory`
+
+**원인**: docker-compose.yml이 backend/.env 파일 존재를 확인함
+
+**해결**:
+```yaml
+# Workflow에 .env 파일 생성 단계 추가
+- name: Create dummy .env file
+  run: |
+    touch backend/.env
+
+- name: Build and push images
+  run: |
+    docker compose build
+    docker compose push
 ```
 
 ### 이미지 Pull 실패

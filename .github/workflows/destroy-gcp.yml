@@ -14,6 +14,9 @@ on:
 jobs:
   destroy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for WIF (Workload Identity Federation)
     environment: ${{ inputs.environment == 'dev' && 'development' || 'staging' }}
 
     steps:
@@ -32,7 +35,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.6.0
+          terraform_version: 1.14.7
 
       - name: Generate terraform.tfvars
         working-directory: terraform/gcp
@@ -45,18 +48,20 @@ jobs:
           openai_secret_name = "${{ vars.GCP_OPENAI_SECRET_NAME }}"
           pinecone_secret_name = "${{ vars.GCP_PINECONE_SECRET_NAME }}"
           pinecone_index_name = "${{ vars.PINECONE_INDEX_NAME }}"
-          backend_cpu = "${{ vars.BACKEND_CPU }}"
-          backend_memory = "${{ vars.BACKEND_MEMORY }}"
+          backend_cpu = "${{ vars.GCP_BACKEND_CPU }}"
+          backend_memory = "${{ vars.GCP_BACKEND_MEMORY }}"
           backend_min_instances = ${{ vars.BACKEND_MIN_INSTANCES }}
           backend_max_instances = ${{ vars.BACKEND_MAX_INSTANCES }}
-          frontend_cpu = "${{ vars.FRONTEND_CPU }}"
-          frontend_memory = "${{ vars.FRONTEND_MEMORY }}"
+          frontend_cpu = "${{ vars.GCP_FRONTEND_CPU }}"
+          frontend_memory = "${{ vars.GCP_FRONTEND_MEMORY }}"
           frontend_min_instances = ${{ vars.FRONTEND_MIN_INSTANCES }}
           frontend_max_instances = ${{ vars.FRONTEND_MAX_INSTANCES }}
           EOF
 
       - name: Terraform Init
         working-directory: terraform/gcp
+        env:
+          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
           terraform init \
             -backend-config="bucket=metacode-terraform-state" \
@@ -64,6 +69,8 @@ jobs:
 
       - name: Destroy Infrastructure
         working-directory: terraform/gcp
+        env:
+          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
           echo "🗑️ Destroying all infrastructure for ${{ vars.ENVIRONMENT }}"
           terraform destroy -auto-approve
