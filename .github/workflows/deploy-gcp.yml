@@ -62,6 +62,8 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform/gcp
+        env:
+          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
           terraform init \
             -backend-config="bucket=metacode-terraform-state" \
