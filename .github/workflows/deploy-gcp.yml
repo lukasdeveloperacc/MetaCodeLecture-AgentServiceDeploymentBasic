@@ -84,10 +84,10 @@ jobs:
       # ========================================================================
 
       - name: Configure Docker for Artifact Registry
-        env:
-          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
-          gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev
+          # Use impersonated service account token for Docker authentication
+          gcloud auth print-access-token --impersonate-service-account=github-actions@agent-service-terraform.iam.gserviceaccount.com | \
+            docker login -u oauth2accesstoken --password-stdin https://${{ vars.GCP_REGION }}-docker.pkg.dev
 
       - name: Create dummy .env file
         run: |
@@ -97,7 +97,6 @@ jobs:
         env:
           BACKEND_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/agent-${{ vars.ENVIRONMENT }}/backend:${{ vars.IMAGE_TAG }}
           FRONTEND_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/agent-${{ vars.ENVIRONMENT }}/frontend:${{ vars.IMAGE_TAG }}
-          GOOGLE_IMPERSONATE_SERVICE_ACCOUNT: github-actions@agent-service-terraform.iam.gserviceaccount.com
         run: |
           echo "🐳 Building images for ${{ vars.ENVIRONMENT }} environment"
           echo "Backend: $BACKEND_IMAGE"
